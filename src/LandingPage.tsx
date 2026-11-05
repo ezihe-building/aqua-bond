@@ -1,13 +1,8 @@
 import { useEffect, useState } from "react";
 import {
-  ArrowDown, ArrowRight, ArrowUpRight, Check, Droplets,
-  Heart, Menu, Play, ShieldCheck, Smartphone, Sparkles, Waves, X,
+  ArrowDown, ArrowRight, ArrowUpRight, Droplets,
+  Heart, Menu, ShieldCheck, Smartphone, Sparkles, Waves, X,
 } from "lucide-react";
-
-type InstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-};
 
 const slides = [
   {
@@ -34,6 +29,14 @@ const slides = [
     imageAlt: "A reusable water bottle ready to take on the day",
     detail: "Your people, cheering you on.",
   },
+  {
+    eyebrow: "A LITTLE REMINDER, FROM SOMEONE WHO CARES.",
+    title: <>HAVE <span className="hero-love">CONFIDENCE</span><br />IN YOURSELF,<br /><em className="hero-love-soft">BECAUSE SHE<br />LOVES YOU</em></>,
+    description: "You are stronger than you think. Carry that love with you, one small moment at a time.",
+    image: "ocean-mood.jpg",
+    imageAlt: "A calm ocean horizon in soft evening light",
+    detail: "You are loved. Keep believing.",
+  },
 ];
 
 const features = [
@@ -45,26 +48,8 @@ const features = [
 export default function LandingPage() {
   const [slideIndex, setSlideIndex] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
-  const [installed, setInstalled] = useState(false);
   const currentSlide = slides[slideIndex];
-
-  useEffect(() => {
-    const handleInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as InstallPromptEvent);
-    };
-    const handleInstalled = () => {
-      setInstalled(true);
-      setInstallPrompt(null);
-    };
-    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
-    window.addEventListener("appinstalled", handleInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
-      window.removeEventListener("appinstalled", handleInstalled);
-    };
-  }, []);
+  const appDownloadUrl = `${import.meta.env.BASE_URL}aqua-bond.apk`;
 
   useEffect(() => {
     const timer = window.setInterval(() => setSlideIndex((index) => (index + 1) % slides.length), 7000);
@@ -84,19 +69,6 @@ export default function LandingPage() {
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
   }, []);
-
-  const installApp = async () => {
-    if (!installPrompt) {
-      goToTracker();
-      return;
-    }
-    await installPrompt.prompt();
-    const choice = await installPrompt.userChoice;
-    if (choice.outcome === "accepted") setInstalled(true);
-    setInstallPrompt(null);
-  };
-
-  const goToTracker = () => { window.location.hash = "/app"; };
 
   const scrollToInstall = () => {
     setMenuOpen(false);
@@ -118,12 +90,12 @@ export default function LandingPage() {
           <a href="#story" onClick={() => setMenuOpen(false)}>Our story</a>
           <a href="#experience" onClick={() => setMenuOpen(false)}>The experience</a>
           <a href="#community" onClick={() => setMenuOpen(false)}>Together</a>
-          <button className="landing-nav-cta" type="button" onClick={scrollToInstall}>Get the app <ArrowUpRight size={15} /></button>
+          <a className="landing-nav-cta" href={appDownloadUrl} download="aqua-bond.apk">Download app <ArrowUpRight size={15} /></a>
         </nav>
       </header>
 
       <section className="landing-hero" aria-roledescription="carousel" aria-label="Discover Aqua Bond">
-        {slides.map((slide, index) => <div key={slide.image} className={index === slideIndex ? "hero-slide hero-slide-active" : "hero-slide"} aria-hidden={index !== slideIndex}>
+        {slides.map((slide, index) => <div key={slide.eyebrow} className={index === slideIndex ? "hero-slide hero-slide-active" : "hero-slide"} aria-hidden={index !== slideIndex}>
           <img className="hero-slide-image" src={`${import.meta.env.BASE_URL}${slide.image}`} alt={slide.imageAlt} fetchPriority={index === 0 ? "high" : "auto"} />
           <div className="hero-slide-shade" />
         </div>)}
@@ -131,11 +103,11 @@ export default function LandingPage() {
         <div className="hero-content" id="main-content">
           <div className="hero-copy" key={slideIndex}>
             <p className="landing-eyebrow"><span className="eyebrow-line" />{currentSlide.eyebrow}</p>
-            <h1>{currentSlide.title}</h1>
+            <h1 className={slideIndex === 3 ? "hero-affirmation" : undefined}>{currentSlide.title}</h1>
             <p className="hero-description">{currentSlide.description}</p>
             <div className="hero-actions">
-              <button className="landing-primary-button" type="button" onClick={goToTracker}>Get started <ArrowRight size={18} /></button>
-              <button className="landing-glass-button" type="button" onClick={scrollToInstall}><span className="play-icon"><Play size={14} fill="currentColor" /></span> Discover the app</button>
+              <a className="landing-primary-button" href={appDownloadUrl} download="aqua-bond.apk">Download the app <Smartphone size={18} /></a>
+              <button className="landing-glass-button" type="button" onClick={scrollToInstall}>Discover Aqua Bond <ArrowDown size={16} /></button>
             </div>
             <div className="hero-proof"><span className="proof-avatars"><i>A</i><i>+</i><i><Heart size={11} fill="currentColor" /></i></span><span>A gentler kind of progress, made for real life.</span></div>
           </div>
@@ -143,7 +115,7 @@ export default function LandingPage() {
         </div>
         <div className="hero-bottom">
           <div className="hero-pagination" role="group" aria-label="Choose a featured slide">
-            {slides.map((slide, index) => <button key={slide.image} className={index === slideIndex ? "pagination-dot pagination-dot-active" : "pagination-dot"} type="button" aria-label={`Show slide ${index + 1}: ${slide.eyebrow}`} aria-current={index === slideIndex ? "true" : undefined} onClick={() => setSlideIndex(index)}><span /></button>)}
+            {slides.map((slide, index) => <button key={slide.eyebrow} className={index === slideIndex ? "pagination-dot pagination-dot-active" : "pagination-dot"} type="button" aria-label={`Show slide ${index + 1}: ${slide.eyebrow}`} aria-current={index === slideIndex ? "true" : undefined} onClick={() => setSlideIndex(index)}><span /></button>)}
           </div>
           <a className="scroll-cue" href="#story"><span>SCROLL TO FEEL THE FLOW</span><ArrowDown size={15} /></a>
           <span className="hero-counter">0{slideIndex + 1}<i>/</i>0{slides.length}</span>
@@ -191,7 +163,7 @@ export default function LandingPage() {
           <div className="community-floating-card"><span className="community-heart"><Heart size={18} fill="currentColor" /></span><span><b>A little cheer goes a long way.</b><small>Your people are right here.</small></span></div>
           <div className="community-watermark">BETTER<br /><em>TOGETHER</em></div>
         </div>
-        <div className="community-copy landing-reveal"><p className="landing-eyebrow"><span className="eyebrow-line" />A GOOD THING, SHARED</p><h2>Make room for<br /><em>your people.</em></h2><p>Build your own little circle. Share a private code, see each other's progress, and make the everyday feel a little less everyday.</p><div className="community-points"><span><Check size={15} /> Private invite codes</span><span><Check size={15} /> Live shared progress</span><span><Check size={15} /> Your own personal profile</span></div><button className="text-link" type="button" onClick={goToTracker}>Come on in <ArrowRight size={16} /></button></div>
+        <div className="community-copy landing-reveal"><p className="landing-eyebrow"><span className="eyebrow-line" />A GOOD THING, SHARED</p><h2>Make room for<br /><em>your people.</em></h2><p>Build your own little circle. Share a private code, see each other's progress, and make the everyday feel a little less everyday.</p><div className="community-points"><span><Droplets size={15} /> Private invite codes</span><span><Waves size={15} /> Live shared progress</span><span><Heart size={15} /> Your own personal profile</span></div><a className="text-link" href={appDownloadUrl} download="aqua-bond.apk">Download Aqua Bond <ArrowRight size={16} /></a></div>
       </section>
 
       <section className="landing-get-started landing-section" id="get-started">
@@ -202,10 +174,9 @@ export default function LandingPage() {
           <h2>Start where<br /><em>you are.</em></h2>
           <p className="get-started-copy">No perfect streak to start. No big promise to make. Just you, a glass of water, and one small thing for yourself.</p>
           <div className="download-actions">
-            <button className="landing-primary-button" type="button" onClick={installApp}>{installed ? <><Check size={18} /> Open Aqua Bond</> : installPrompt ? <><Smartphone size={18} /> Install Aqua Bond</> : <><Droplets size={18} /> Open in browser</>}<ArrowRight size={17} /></button>
-            <a className="landing-download-link" href="https://github.com/ezihe-building/aqua-bond/releases/latest" target="_blank" rel="noreferrer"><Smartphone size={17} /><span><b>Android app</b><small>Get the latest install</small></span><ArrowUpRight size={16} /></a>
+            <a className="landing-primary-button" href={appDownloadUrl} download="aqua-bond.apk"><Smartphone size={18} /> Download Aqua Bond <ArrowRight size={17} /></a>
           </div>
-          <p className="install-note"><ShieldCheck size={14} /> Your own private profile. Your progress stays yours.</p>
+          <p className="install-note"><ShieldCheck size={14} /> Android app download. Your private profile stays on your device.</p>
         </div>
         <div className="download-side-note"><span>DESIGNED TO MEET YOU WHERE YOU ARE</span><i>AB—25</i></div>
       </section>
@@ -213,7 +184,7 @@ export default function LandingPage() {
       <footer className="landing-footer">
         <a className="landing-brand" href="#" aria-label="Aqua Bond home"><img src={`${import.meta.env.BASE_URL}aqua-bond-logo.svg`} alt="" /><span>AQUA <b>BOND</b></span></a>
         <span className="footer-note">Make space for feeling good.</span>
-        <div><a href="#story">Our story</a><a href="#get-started">Get started</a><a href="https://github.com/ezihe-building/aqua-bond" target="_blank" rel="noreferrer">Made with care <ArrowUpRight size={13} /></a></div>
+        <div><a href="#story">Our story</a><a href="#get-started">Download app</a><span>Made with care <Heart size={13} /></span></div>
         <span className="copyright">© {new Date().getFullYear()} AQUA BOND</span>
       </footer>
     </main>

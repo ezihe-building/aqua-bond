@@ -15,6 +15,7 @@
   --blue: #5799ff;
   --purple: #a68bff;
 }
+.app-startup { min-height: 100vh; display: grid; place-items: center; background: #070b13; color: #d7eee4; font: 600 12px/1 "DM Sans", sans-serif; letter-spacing: .24em; }
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bg); }
@@ -198,8 +199,6 @@ h1,h2,h3,h4,p { margin-top: 0; }
 .completion-overlay > p { max-width: 280px; margin-bottom: 20px; color: #a2b3c2; font-size: 11px; line-height: 1.6; }
 .celebration-badge { padding: 8px 13px; color: #d0e7f3; border: 1px solid rgba(121,205,245,.2); border-radius: 20px; background: rgba(77,175,223,.11); font-size: 10px; }
 .celebration-badge span { margin-right: 4px; }
-.install-banner { width: 100%; margin-top: 14px; padding: 13px 15px; display: flex; align-items: center; justify-content: space-between; color: #b5cbe0; border: 1px solid rgba(103,223,251,.15); border-radius: 11px; background: rgba(23,47,63,.41); cursor: pointer; font-size: 10px; }
-.install-banner span { display: flex; align-items: center; gap: 7px; }.install-banner span:last-child { color: #84dff4; }
 .bottom-nav { position: fixed; z-index: 10; bottom: 18px; left: 50%; width: min(440px, calc(100% - 36px)); height: 66px; padding: 6px 12px; display: flex; align-items: center; justify-content: space-around; gap: 5px; border: 1px solid rgba(159,199,233,.12); border-radius: 22px; background: rgba(9,14,23,.91); box-shadow: 0 12px 40px rgba(0,0,0,.24); backdrop-filter: blur(22px); transform: translateX(-50%); }
 .bottom-nav button { min-width: 68px; min-height: 48px; padding: 6px 10px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px; color: #74849a; border: 0; border-radius: 15px; background: transparent; cursor: pointer; transition: color .18s, background .18s, transform .18s; }
 .bottom-nav button span { font-size: 8px; font-weight: 600; letter-spacing: .2px; }
@@ -278,7 +277,6 @@ h1,h2,h3,h4,p { margin-top: 0; }
 .connected-friend { min-height: 53px; padding: 7px 9px; display: flex; align-items: center; gap: 9px; border: 1px solid rgba(142,129,213,.14); border-radius: 9px; background: rgba(79,73,137,.09); }.friend-avatar { width: 31px; height: 31px; color: #ddcaff; background: linear-gradient(145deg,#3b315a,#252642); border-color: rgba(180,153,248,.25); }.connected-friend > div { flex: 1; }.connected-friend > div b,.connected-friend > div span { display: block; }.connected-friend > div b { color: #ddd5f4; font-size: 9px; }.connected-friend > div span { margin-top: 3px; color: #8988a5; font-size: 8px; }.connected-friend .live-dot { margin-right: 4px; }.disconnect-button { margin-top: 9px; padding: 3px 0; display: flex; align-items: center; gap: 5px; color: #9b8991; border: 0; background: none; cursor: pointer; font-size: 8px; }.disconnect-button:hover { color: #e7a89d; }
 .followed-list { margin-top: 12px; display: grid; gap: 7px; }.followed-list .connected-friend { min-height: 48px; }.followed-list .disconnect-button { margin: 0; padding: 5px; flex: 0 0 auto; }.followed-empty { margin: 12px 0 0; color: #8995a8; font-size: 9px; line-height: 1.5; }
 .privacy-card { padding: 13px; display: flex; align-items: start; gap: 9px; border-color: rgba(104,205,175,.11); background: rgba(19,36,37,.44); }.privacy-icon { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; color: #73d8b8; border-radius: 8px; background: rgba(70,179,144,.1); }.privacy-card h4 { margin: 0 0 4px; color: #b9d8ce; font: 600 9px "Manrope",sans-serif; }.privacy-card p { margin: 0; color: #829b91; font-size: 8px; line-height: 1.55; }
-.install-setting { min-height: 40px; padding: 0 10px; display: flex; align-items: center; gap: 7px; color: #9eddec; border: 1px solid rgba(103,223,251,.13); border-radius: 9px; background: rgba(23,47,63,.37); cursor: pointer; font-size: 9px; }.install-setting > svg:last-child { margin-left: auto; }
 .sign-out-button { margin-top: 1px; padding: 9px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #8f8992; border: 1px solid rgba(174,139,146,.1); border-radius: 8px; background: rgba(54,34,41,.19); cursor: pointer; font-size: 9px; }.sign-out-button:hover { color: #ecaaa3; border-color: rgba(174,139,146,.22); }
 .loading-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 15px; color: #91a3b5; background: #070b13; font-size: 11px; }.loader-drop { width: 49px; height: 49px; display: grid; place-items: center; color: #76e0fa; border: 1px solid rgba(103,223,251,.22); border-radius: 16px; background: rgba(52,140,183,.12); box-shadow: 0 0 28px rgba(77,188,232,.12); animation: float 2s ease-in-out infinite; }
 .auth-page { min-height: 100vh; padding: 25px 16px; display: grid; place-items: center; overflow: hidden; position: relative; background: radial-gradient(ellipse at 50% 8%,rgba(37,92,140,.19),transparent 38%),radial-gradient(ellipse at 86% 78%,rgba(72,61,126,.1),transparent 35%),#070b13; }
@@ -418,7 +416,7 @@ html[data-theme="light"] .history-fill,html[data-theme="light"] .history-fill.fi
 html[data-theme="light"] .log-progress div,html[data-theme="light"] .month-cell.month-complete,
 html[data-theme="light"] .milestone-progress i { background: #555; box-shadow: none; }
 html[data-theme="light"] .month-cell.month-started { border-color: #aaa; background: #ccc; }
-html[data-theme="light"] .app-shell :is(.streak-flame, .log-day-icon, .empty-history > div, .month-cell, .amount-options button, .goal-presets button, .install-banner, .icon-button, .primary-button, .join-form button) {
+html[data-theme="light"] .app-shell :is(.streak-flame, .log-day-icon, .empty-history > div, .month-cell, .amount-options button, .goal-presets button, .icon-button, .primary-button, .join-form button) {
   border-color: #d0d0d0;
   background-color: #f1f1f1;
   box-shadow: none;

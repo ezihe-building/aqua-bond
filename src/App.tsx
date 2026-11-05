@@ -6,6 +6,9 @@ import {
   RefreshCw, type LucideIcon,
 } from "lucide-react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { App as NativeApp } from "@capacitor/app";
+import { Browser } from "@capacitor/browser";
+import { Capacitor } from "@capacitor/core";
 
 type Profile = {
   id: string;
@@ -53,6 +56,8 @@ const makeId = () => crypto.randomUUID();
 const MUSIC_PREFERENCE_KEY = "aqua-bond-ambient-music";
 const THEME_PREFERENCE_KEY = "aqua-bond-theme";
 const BOTTLE_PREFERENCE_KEY = "aqua-bond-bottle-style";
+const APP_VERSION_URL = "https://ezihe-building.github.io/aqua-bond/app-version.json";
+const APP_DOWNLOAD_URL = "https://ezihe-building.github.io/aqua-bond/aqua-bond.apk";
 const BOTTLE_STYLES: { id: BottleStyle; name: string; detail: string }[] = [
   { id: "classic", name: "Classic", detail: "Everyday glass" },
   { id: "sport", name: "Sport", detail: "Easy-grip shape" },
@@ -60,6 +65,16 @@ const BOTTLE_STYLES: { id: BottleStyle; name: string; detail: string }[] = [
   { id: "flask", name: "Flask", detail: "Clean and sturdy" },
   { id: "wide", name: "Wide", detail: "Room for more" },
 ];
+
+function compareVersions(first: string, second: string) {
+  const firstParts = first.split(".").map(Number);
+  const secondParts = second.split(".").map(Number);
+  for (let index = 0; index < Math.max(firstParts.length, secondParts.length); index++) {
+    const difference = (firstParts[index] ?? 0) - (secondParts[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
 
 function getMusicPreference() {
   try {
@@ -131,12 +146,9 @@ function App() {
   const [toast, setToast] = useState("");
   const [inviteEntry, setInviteEntry] = useState("");
   const [busy, setBusy] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationMenuRef = useRef<HTMLDivElement | null>(null);
-  const [updateReady, setUpdateReady] = useState(false);
-  const waitingWorker = useRef<ServiceWorker | null>(null);
-  const refreshingForUpdate = useRef(false);
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const friendCompletionState = useRef<Map<string, boolean>>(new Map());
   const [musicEnabled, setMusicEnabled] = useState(getMusicPreference);
   const [musicState, setMusicState] = useState<"off" | "waiting" | "playing">(musicEnabled ? "waiting" : "off");
@@ -478,26 +490,38 @@ function App() {
   }, [today, profile?.id, isGuest, loadCloudData, notify]);
 
   useEffect(() => {
-    const handler = (event: Event) => setInstallPrompt(event as BeforeInstallPromptEvent);
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
-
-  useEffect(() => {
-    const handleUpdateReady = (event: Event) => {
-      waitingWorker.current = (event as CustomEvent<ServiceWorker>).detail;
-      setUpdateReady(true);
+    if (!Capacitor.isNativePlatform()) return;
+    let active = true;
+    const checkForNativeUpdate = async () => {
+      try {
+        const [installed, response] = await Promise.all([
+          NativeApp.getInfo(),
+          fetch(`${APP_VERSION_URL}?t=${Date.now()}`, { cache: "no-store" }),
+        ]);
+        if (!response.ok) throw new Error(`Version check failed with HTTP ${response.status}.`);
+        const release: unknown = await response.json();
+        if (!release || typeof release !== "object" || !("version" in release) || typeof release.version !== "string" || !/^\d+\.\d+\.\d+$/.test(release.version)) {
+          throw new Error("The latest Aqua Bond version response was invalid.");
+        }
+        if (active && compareVersions(release.version, installed.version) > 0) setUpdateVersion(release.version);
+      } catch (error) {
+        console.error("Could not check for Aqua Bond Android updates.", error);
+      }
     };
-    const handleControllerChange = () => {
-      if (!waitingWorker.current || refreshingForUpdate.current) return;
-      refreshingForUpdate.current = true;
-      window.location.reload();
-    };
-    window.addEventListener("aquabond:sw-update", handleUpdateReady);
-    navigator.serviceWorker?.addEventListener("controllerchange", handleControllerChange);
+    void checkForNativeUpdate();
+    window.addEventListener("focus", checkForNativeUpdate);
+    const listenerPromise = NativeApp.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) void checkForNativeUpdate();
+    });
+    void listenerPromise.catch((error: unknown) => {
+      console.error("Could not listen for Aqua Bond app state changes.", error);
+    });
     return () => {
-      window.removeEventListener("aquabond:sw-update", handleUpdateReady);
-      navigator.serviceWorker?.removeEventListener("controllerchange", handleControllerChange);
+      active = false;
+      window.removeEventListener("focus", checkForNativeUpdate);
+      void listenerPromise.then((listener) => listener.remove()).catch((error: unknown) => {
+        console.error("Could not remove the Aqua Bond app state listener.", error);
+      });
     };
   }, []);
 
@@ -509,9 +533,14 @@ function App() {
     }
   }, [bottleStyle]);
 
-  const applyAppUpdate = () => {
-    if (!waitingWorker.current) return;
-    waitingWorker.current.postMessage({ type: "SKIP_WAITING" });
+  const applyAppUpdate = async () => {
+    if (!updateVersion) return;
+    try {
+      await Browser.open({ url: APP_DOWNLOAD_URL });
+    } catch (error) {
+      console.error("Could not open the Aqua Bond Android update download.", error);
+      notify("The update download couldn't be opened. Please try again.");
+    }
   };
 
   const persistProfile = async (updated: Profile) => {
@@ -706,12 +735,6 @@ function App() {
     }
   };
 
-  const installApp = async () => {
-    if (!installPrompt) return;
-    await installPrompt.prompt();
-    setInstallPrompt(null);
-  };
-
   const weekData = useMemo(() => {
     return Array.from({ length: 7 }, (_, index) => {
       const key = relativeDays(6 - index);
@@ -764,7 +787,7 @@ function App() {
         </div>
       </header>
 
-      {updateReady && <div className="update-banner" role="status"><span><RefreshCw size={17} /> A fresh Aqua Bond update is ready.</span><button type="button" onClick={applyAppUpdate}>Update now</button></div>}
+      {updateVersion && <div className="update-banner" role="status"><span><RefreshCw size={17} /> Aqua Bond {updateVersion} is ready. Download and approve the Android update.</span><button type="button" onClick={() => void applyAppUpdate()}>Download update</button></div>}
 
       {isGuest && <div className="local-banner"><CircleHelp size={15} /><span>Local mode · your data stays on this device. <b>Supabase enables friend sync.</b></span>{!cloudReady && <button onClick={() => notify("Add your Supabase project URL and anon/publishable key to .env, then run the setup SQL.")}>How to connect?</button>}</div>}
 
@@ -825,7 +848,6 @@ function App() {
               <div className="daily-note"><div className="note-icon"><Sparkles size={17} /></div><div><span>A LITTLE NOTE FOR TODAY</span><p>{["You don't need to do it all at once. Just take the next sip.", "A tiny act of care still counts. Here's to yours.", "Slow and steady looks lovely on you.", "You're doing better than you think. Keep sipping.", "Your body does a lot for you. This one's for it."][new Date().getDay() % 5]}</p></div></div>
             </aside>
           </section>
-          {installPrompt && <button className="install-banner" onClick={() => void installApp()}><span><Sparkles size={15} /> Keep Aqua Bond close</span><span>Install app <ArrowRight size={15} /></span></button>}
         </>}
 
         {screen === "history" && <section className="content-grid">
@@ -863,7 +885,6 @@ function App() {
           <aside className="settings-side">
             {isGuest ? <article className="glass-card invite-card invite-disabled"><div className="invite-decoration"><Users size={21} /></div><span className="card-kicker">BETTER TOGETHER</span><h3>Your people are<br /><span>one sip away.</span></h3><p>Connect this app to Supabase to get a private invite code and connect with multiple friends. No sign-up needed.</p><div className="invite-code"><span>FRIEND SYNC</span><b>Needs Supabase</b><button onClick={() => notify("Add your Supabase project URL and anon/publishable key to .env, then run the setup SQL.")}><CircleHelp size={15} /></button></div></article> : <article className="glass-card invite-card"><div className="invite-decoration"><Users size={21} /></div><span className="card-kicker">YOUR WATER BUDDIES</span><h3>Good habits are<br /><span>better together.</span></h3><p>Share your private code, then connect with other people's invite codes. Connected friends can see each other's progress live.</p><div className="invite-code"><span>YOUR PRIVATE CODE</span><b>{profile.invite_code}</b><button aria-label="Share invite code" onClick={() => void shareInvite()}><Share2 size={15} /></button></div><form className="join-form" onSubmit={(event) => void connectFriend(event)}><input value={inviteEntry} onChange={(event) => setInviteEntry(event.target.value.toUpperCase())} placeholder="Enter their invite code" aria-label="Friend invite code" /><button className="button-primary" disabled={busy}>Connect <ArrowRight size={15} /></button></form><div className="followed-list" aria-live="polite">{friends.length === 0 ? <p className="followed-empty">You haven’t connected with anyone yet. Add your first person above.</p> : friends.map((followed) => { const amount = followed.logs.filter((log) => log.challenge_date === today).reduce((sum, log) => sum + log.amount_ml, 0); const percentComplete = Math.min(100, Math.round((amount / followed.profile.daily_goal_ml) * 100)); return <div className="connected-friend" key={followed.profile.id}><span className="avatar friend-avatar">{followed.profile.display_name.slice(0, 1).toUpperCase()}</span><div><b>{followed.profile.display_name}</b><span>{percentComplete}% of today’s goal</span></div><span className="live-dot" /><button className="disconnect-button" aria-label={`Disconnect from ${followed.profile.display_name}`} onClick={() => void disconnectFriend(followed)}><X size={14} /></button></div>; })}</div></article>}
             <article className="glass-card privacy-card"><div className="privacy-icon"><ShieldCheck size={20} /></div><div><h4>Your water is personal.</h4><p>Connected friends can see each other's drink logs and daily goals.</p></div></article>
-            {installPrompt && <button className="install-setting" onClick={() => void installApp()}><Sparkles size={15} /> Install Aqua Bond on this device <ArrowRight size={15} /></button>}
           </aside>
         </section>}
       </main>
@@ -881,11 +902,6 @@ function App() {
 
 function BuddyBottle({ name, percent, consumed, goal, hue, initial }: { name: string; percent: number; consumed: number; goal: number; hue: "blue" | "purple"; initial: string }) {
   return <div className={`buddy-person buddy-${hue}`}><div className="buddy-bottle"><Bottle percent={100 - percent} compact hue={hue} /><span className="buddy-initial">{initial}</span></div><b className="buddy-name">{name}</b><strong>{percent}<small>%</small></strong><div className="buddy-meter"><i style={{ width: `${percent}%` }} /></div><span className="buddy-ml">{formatMl(consumed)} / {formatMl(goal)} ml</span></div>;
-}
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }
 
 export default App;
