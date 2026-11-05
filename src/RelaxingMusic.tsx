@@ -32,7 +32,7 @@ export default function RelaxingMusic({ className }: { className: string }) {
           setWaitingForGesture(true);
           return;
         }
-        console.error("Could not play the relaxing music. Check that public/relaxing-music.mp3 exists.", error);
+        console.error("Could not play the relaxing music from public/where you are.mp3.", error);
       });
     };
     const resumePlayback = () => {
@@ -81,7 +81,7 @@ export default function RelaxingMusic({ className }: { className: string }) {
       >
         {!enabled ? <VolumeX size={17} /> : waitingForGesture ? <Music2 size={17} /> : <Volume2 size={17} />}
       </button>
-      <audio ref={audioRef} src={`${import.meta.env.BASE_URL}relaxing-music.mp3`} loop preload="auto" />
+      <audio ref={audioRef} src={`${import.meta.env.BASE_URL}where%20you%20are.mp3`} loop preload="auto" />
     </>
   );
 }

@@ -14,7 +14,7 @@ The Supabase schema enables row-level security for profiles, friend links, daily
 
 ## App notifications
 
-Choose between five bottle designs in **Customize**; the choice is saved on that device. The app allows one drink log per hour, limits each drink to 500 ml, and schedules a local reminder for the next drink when notifications are allowed. The one-hour rule is enforced by Supabase; run the cooldown migration above before deploying the updated app. Soft ambient music attempts to start on launch; browser autoplay restrictions may require a tap. The music file must be placed at `public/relaxing-music.mp3`.
+Choose between five bottle designs in **Customize**; the choice is saved on that device. The app allows one drink log per hour, limits each drink to 500 ml, and schedules a local reminder for the next drink when notifications are allowed. The one-hour rule is enforced by Supabase; run the cooldown migration above before deploying the updated app. Soft ambient music attempts to start on launch; browser autoplay restrictions may require a tap. It uses the included `public/where you are.mp3`.
 
 ## Android app
 
