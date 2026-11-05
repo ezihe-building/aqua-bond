@@ -1,16 +1,17 @@
 # Aqua Bond
 
-Aqua Bond is a mobile-first hydration challenge. It includes a local-only mode for trying the app on one device, and a Supabase-backed mode for private profiles, saved history, invite-code connections, and live progress for followed friends. With Supabase configured, the app creates a private anonymous session automatically: users do not need to register with an email or password.
+Aqua Bond is a mobile-first hydration challenge with individual email/password accounts, saved history, invite-code friend connections, and live progress. Each person signs in to their own account; sharing the website link does not share the current user's data. Existing anonymous profiles can be upgraded with an email and password without losing their history or connections.
 
 ## Run locally
 
 1. Install dependencies with `npm install`.
-2. In your Supabase project, enable **Authentication → Sign In / Providers → Anonymous Sign-Ins**.
+2. In your Supabase project, enable **Authentication → Sign In / Providers → Email** and **manual identity linking**. Keep Anonymous Sign-Ins enabled temporarily if existing anonymous profiles still need upgrading.
 3. Copy `.env.example` to `.env` and add the project URL and publishable (anon) key from **Project Settings → API**.
 4. Run the SQL in [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL editor.
-5. Start the app with `npm run dev`.
+5. In **Authentication → URL Configuration**, set the Site URL to your deployed site and add both the deployed site and `http://localhost:5173/**` to the allowed redirect URLs.
+6. Start the app with `npm run dev`.
 
-Without Supabase credentials, the app opens in local mode. Its profile and logs are stored only in that browser and are not shared or synchronized. With Supabase configured, each browser/device gets its own private anonymous profile automatically. Set your name in **You**, share your invite code, and enter other people's codes there to connect with multiple friends. As with the original buddy feature, connected friends can see each other's hydration progress. The anonymous session is persisted on the device; clearing browser storage loses access to that profile and its data.
+On the first visit, create an account or sign in. Existing anonymous sessions are asked to add an email, verify it, and then choose a password; this secures that same profile without losing its progress or friend links. A new account may also require email confirmation before sign-in. Sign out from **You** before another person uses the same browser/device. Share your invite code and enter other people's codes in **You** to connect; connected friends can see each other's hydration progress.
 
 The Supabase schema enables row-level security for profiles, friend links, daily challenges, and water logs. The `connect_friend` function validates invite codes without making other users' profiles publicly searchable. To update an existing project, rerun the latest [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL editor; it preserves existing profiles and friend links while removing the one-friend limit. **Never put a Supabase `service_role` or secret key in this app.** Only the publishable/anon key belongs in `.env`; database writes are restricted by the SQL policies and server functions.
 
