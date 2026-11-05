@@ -425,13 +425,16 @@ function App() {
             },
           });
           if (error) throw error;
-          if (data.session && data.user) {
-            await handleProfile({ id: data.user.id }, Boolean(data.user.is_anonymous));
-            setAuthPassword("");
-            notify("Your account is ready. Welcome to Aqua Bond 💙");
-          } else {
+          if (!data.user) throw new Error("Supabase did not return an account. Please try again.");
+          if (!data.session) {
+            if (data.user.identities?.length === 0) {
+              throw new Error("An account with this email may already exist. Switch to Sign in and try your password. If that account was created while email confirmation was on, it must be confirmed or removed from Supabase Dashboard → Authentication → Users before you can sign up with this address again.");
+            }
             throw new Error("Supabase did not start a session. Email confirmation is still enabled for this project. Turn it off in Supabase Dashboard → Authentication → Sign In / Providers → Email, then try signing in before attempting to create the account again.");
           }
+          await handleProfile({ id: data.user.id }, Boolean(data.user.is_anonymous));
+          setAuthPassword("");
+          notify("Your account is ready. Welcome to Aqua Bond 💙");
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
