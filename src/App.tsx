@@ -34,7 +34,10 @@ const authRedirectUrl = () => {
 const authenticationErrorMessage = (error: unknown) => {
   const message = error instanceof Error ? error.message : "Couldn't complete that request. Please try again.";
   if (/rate.?limit|too many requests/i.test(message)) {
-    return "Supabase temporarily blocked verification emails because its built-in sender is limited to 2 emails per hour. Wait for the hourly limit to reset before trying again. For reliable sign-ups, configure custom SMTP in Supabase Dashboard → Authentication → SMTP Settings. Your account may already have been created, so don't submit the sign-up form repeatedly.";
+    return "Supabase temporarily limited an authentication email. Wait for its limit to reset before trying again. New account creation should not send email; if this happened while signing up, turn off email confirmation in Supabase Dashboard → Authentication → Sign In / Providers → Email. Your account may already exist, so try signing in before creating it again.";
+  }
+  if (/email not confirmed|email confirmation required/i.test(message)) {
+    return "This account still needs email confirmation. Turn off email confirmation in Supabase Dashboard → Authentication → Sign In / Providers → Email for new accounts, then try signing in again. If this account was created while confirmation was required, it may need to be removed from Authentication → Users before you can sign up again.";
   }
   return message;
 };
@@ -419,14 +422,15 @@ function App() {
             password: authPassword,
             options: {
               data: { display_name: displayName },
-              emailRedirectTo: authRedirectUrl(),
             },
           });
           if (error) throw error;
           if (data.session && data.user) {
             await handleProfile({ id: data.user.id }, Boolean(data.user.is_anonymous));
+            setAuthPassword("");
+            notify("Your account is ready. Welcome to Aqua Bond 💙");
           } else {
-            setAuthMessage("Account created. Check your email to confirm your address, then sign in.");
+            throw new Error("Supabase did not start a session. Email confirmation is still enabled for this project. Turn it off in Supabase Dashboard → Authentication → Sign In / Providers → Email, then try signing in before attempting to create the account again.");
           }
         }
       } else {
@@ -946,7 +950,7 @@ function AuthWelcome({
         <a className="brand auth-brand" href="#"><span className="brand-mark"><Droplets size={18} /></span><span>aqua<span className="brand-light">bond</span></span></a>
         <p className="eyebrow">{hasAnonymousProfile || needsUpgradePassword ? "KEEP YOUR WATER STORY SAFE" : "A LITTLE WATER. A LOT MORE TOGETHER."}</p>
         <h1>{hasAnonymousProfile ? <>Make your profile<br /><span>yours alone.</span></> : settingPassword ? <>One last little<br /><span>step.</span></> : signingUp ? <>A softer way to<br /><span>stay hydrated.</span></> : <>Welcome <span>back.</span></>}</h1>
-        <p className="auth-subtitle">{hasAnonymousProfile ? "Verify your email first; your progress and friends stay on this profile." : settingPassword ? "Your email is verified. Set a password to finish securing your existing profile." : "Your own private account keeps your water story separate on every device."}</p>
+        <p className="auth-subtitle">{hasAnonymousProfile ? "Add an email and password to keep your progress and friends on this profile." : settingPassword ? "Set a password to finish securing your existing profile." : signingUp ? "Create your private account with an email and password. No verification email is needed." : "Your own private account keeps your water story separate on every device."}</p>
         {!hasAnonymousProfile && !settingPassword && <div className="auth-mode-tabs" role="tablist" aria-label="Account options">
           <button type="button" className={!signingUp ? "auth-mode-active" : ""} role="tab" aria-selected={!signingUp} onClick={() => onModeChange("sign_in")}>Sign in</button>
           <button type="button" className={signingUp ? "auth-mode-active" : ""} role="tab" aria-selected={signingUp} onClick={() => onModeChange("sign_up")}>Create account</button>
