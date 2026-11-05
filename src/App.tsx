@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import {
   Activity, ArrowLeft, ArrowRight, Bell, Check, CheckCircle2, ChevronDown, ChevronRight,
-  CircleHelp, Clock3, Droplets, Flame, GlassWater, Heart, History, Menu, Music2, Plus,
+  CircleHelp, Clock3, Droplets, Flame, GlassWater, Heart, History, Menu, Plus,
   Moon, Share2, ShieldCheck, Sparkles, Sun, Trophy, UserRound, Users, Volume2, VolumeX, Waves, X,
   RefreshCw, type LucideIcon,
 } from "lucide-react";
@@ -9,6 +9,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { App as NativeApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
+import RelaxingMusic from "./RelaxingMusic";
 
 type Profile = {
   id: string;
@@ -53,9 +55,11 @@ const relativeDays = (count: number) => {
   return dateKey(date);
 };
 const makeId = () => crypto.randomUUID();
-const MUSIC_PREFERENCE_KEY = "aqua-bond-ambient-music";
 const THEME_PREFERENCE_KEY = "aqua-bond-theme";
 const BOTTLE_PREFERENCE_KEY = "aqua-bond-bottle-style";
+const DRINK_COOLDOWN_MS = 60 * 60 * 1000;
+const MAX_DRINK_AMOUNT_ML = 500;
+const DRINK_REMINDER_NOTIFICATION_ID = 250;
 const APP_VERSION_URL = "https://ezihe-building.github.io/aqua-bond/app-version.json";
 const APP_DOWNLOAD_URL = "https://ezihe-building.github.io/aqua-bond/aqua-bond.apk";
 const BOTTLE_STYLES: { id: BottleStyle; name: string; detail: string }[] = [
@@ -74,15 +78,6 @@ function compareVersions(first: string, second: string) {
     if (difference !== 0) return difference;
   }
   return 0;
-}
-
-function getMusicPreference() {
-  try {
-    return localStorage.getItem(MUSIC_PREFERENCE_KEY) !== "off";
-  } catch (error) {
-    console.error("Could not read the relaxing music preference.", error);
-    return true;
-  }
 }
 
 function getThemePreference(): "dark" | "light" {
@@ -141,6 +136,8 @@ function App() {
   const [isGuest, setIsGuest] = useState(false);
   const [drinkAmount, setDrinkAmount] = useState(250);
   const [customAmount, setCustomAmount] = useState("");
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [clockNow, setClockNow] = useState(Date.now());
   const [nameEntry, setNameEntry] = useState<string | null>(null);
   const [notification, setNotification] = useState("");
   const [toast, setToast] = useState("");
@@ -150,14 +147,15 @@ function App() {
   const navigationMenuRef = useRef<HTMLDivElement | null>(null);
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const friendCompletionState = useRef<Map<string, boolean>>(new Map());
-  const [musicEnabled, setMusicEnabled] = useState(getMusicPreference);
-  const [musicState, setMusicState] = useState<"off" | "waiting" | "playing">(musicEnabled ? "waiting" : "off");
-  const ambientAudio = useRef<AudioContext | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(getThemePreference);
   const [bottleStyle, setBottleStyle] = useState<BottleStyle>(getBottlePreference);
   const [today, setToday] = useState(dateKey());
   const confettiBits = useMemo(() => Array.from({ length: 34 }, (_, index) => ({ id: index, left: `${(index * 37) % 100}%`, delay: `${(index % 9) * 0.11}s`, color: ["#71e7ff", "#83a8ff", "#a988ff", "#fff", "#50caff"][index % 5] })), []);
   const todayLogs = logs.filter((log) => log.challenge_date === today);
+  const cooldownRemainingMs = Math.max(0, cooldownUntil - clockNow);
+  const cooldownTotalSeconds = Math.ceil(cooldownRemainingMs / 1000);
+  const cooldownMinutes = Math.floor(cooldownTotalSeconds / 60);
+  const cooldownSeconds = cooldownTotalSeconds % 60;
   const consumed = todayLogs.reduce((sum, log) => sum + log.amount_ml, 0);
   const goal = profile?.daily_goal_ml ?? 2000;
   const percent = Math.min(100, Math.round((consumed / goal) * 100));
@@ -217,83 +215,6 @@ function App() {
 
   const toggleTheme = () => setTheme((current) => current === "dark" ? "light" : "dark");
 
-  const startAmbientMusic = useCallback(async () => {
-    try {
-      let context = ambientAudio.current;
-      if (!context || context.state === "closed") {
-        context = new AudioContext();
-        const master = context.createGain();
-        master.gain.setValueAtTime(0.0001, context.currentTime);
-        master.gain.exponentialRampToValueAtTime(0.035, context.currentTime + 3);
-        master.connect(context.destination);
-        [130.81, 164.81, 196, 246.94].forEach((frequency) => {
-          const oscillator = context!.createOscillator();
-          const voice = context!.createGain();
-          oscillator.type = "sine";
-          oscillator.frequency.value = frequency;
-          voice.gain.value = 0.18;
-          oscillator.connect(voice);
-          voice.connect(master);
-          oscillator.start();
-        });
-        ambientAudio.current = context;
-      }
-      if (context.state === "suspended") await context.resume();
-      if (ambientAudio.current !== context) return;
-      setMusicState(context.state === "running" ? "playing" : "waiting");
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === "NotAllowedError")) {
-        console.error("Could not start relaxing music.", error);
-        notify("Relaxing music couldn't start. Try again using the music button.");
-      }
-      setMusicState("waiting");
-    }
-  }, [notify]);
-
-  const toggleAmbientMusic = () => {
-    if (musicEnabled && musicState === "waiting") {
-      void startAmbientMusic();
-      return;
-    }
-    const enabled = !musicEnabled;
-    try {
-      localStorage.setItem(MUSIC_PREFERENCE_KEY, enabled ? "on" : "off");
-    } catch (error) {
-      console.error("Could not save the relaxing music preference.", error);
-    }
-    setMusicEnabled(enabled);
-    if (enabled) void startAmbientMusic();
-  };
-
-  useEffect(() => {
-    if (!musicEnabled) {
-      const context = ambientAudio.current;
-      ambientAudio.current = null;
-      setMusicState("off");
-      if (context && context.state !== "closed") {
-        void context.close().catch((error: unknown) => console.error("Could not stop relaxing music.", error));
-      }
-      return;
-    }
-    setMusicState("waiting");
-    void startAmbientMusic();
-  }, [musicEnabled, startAmbientMusic]);
-
-  useEffect(() => {
-    if (!musicEnabled) return;
-    const resumeMusic = () => {
-      if (document.visibilityState === "visible") void startAmbientMusic();
-    };
-    window.addEventListener("pointerdown", resumeMusic);
-    window.addEventListener("keydown", resumeMusic);
-    document.addEventListener("visibilitychange", resumeMusic);
-    return () => {
-      window.removeEventListener("pointerdown", resumeMusic);
-      window.removeEventListener("keydown", resumeMusic);
-      document.removeEventListener("visibilitychange", resumeMusic);
-    };
-  }, [musicEnabled, startAmbientMusic]);
-
   const loadCloudData = useCallback(async (userId: string) => {
     if (!supabase) return;
     const since = relativeDays(399);
@@ -351,6 +272,32 @@ function App() {
       setChallenges((current) => [...current, { challenge_date: today, goal_ml: profileResult.data.daily_goal_ml, completed_at: null }]);
     }
   }, [today]);
+
+  useEffect(() => {
+    if (!profile) {
+      setCooldownUntil(0);
+      return;
+    }
+    let savedCooldown = 0;
+    const storageKey = `aqua-bond-drink-cooldown-${profile.id}`;
+    try {
+      savedCooldown = Number(localStorage.getItem(storageKey)) || 0;
+    } catch (error) {
+      console.error("Could not read the drink cooldown.", error);
+    }
+    const latestLogCooldown = logs.reduce(
+      (latest, log) => Math.max(latest, Date.parse(log.created_at) + DRINK_COOLDOWN_MS),
+      0,
+    );
+    const nextAllowedAt = Math.max(savedCooldown, latestLogCooldown);
+    setCooldownUntil(nextAllowedAt > Date.now() ? nextAllowedAt : 0);
+  }, [profile?.id, logs]);
+
+  useEffect(() => {
+    if (!cooldownUntil || cooldownUntil <= Date.now()) return;
+    const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldownUntil]);
 
   const handleProfile = useCallback(async (nextProfile: Pick<Profile, "id">, anonymous: boolean) => {
     setIsGuest(false);
@@ -570,14 +517,20 @@ function App() {
 
   const logDrink = async () => {
     if (!profile || busy) return;
+    if (cooldownUntil > Date.now()) {
+      notify(`Your next drink is ready in ${cooldownMinutes}:${String(cooldownSeconds).padStart(2, "0")}.`);
+      return;
+    }
     const amount = drinkAmount === -1 ? Number(customAmount) : drinkAmount;
-    if (!Number.isInteger(amount) || amount < 1 || amount > 5000) { notify("Choose an amount from 1 to 5,000 ml."); return; }
+    if (!Number.isInteger(amount) || amount < 1) { notify("Choose a valid drink amount."); return; }
+    if (amount > MAX_DRINK_AMOUNT_ML) { notify("Don't rush the process, take it bit by bit"); return; }
     setBusy(true);
     try {
       const entry: WaterLog = { id: makeId(), user_id: profile.id, amount_ml: amount, created_at: new Date().toISOString(), challenge_date: today };
       const total = consumed + amount;
       const completionTime = total >= goal ? new Date().toISOString() : null;
       let completedChallenge = Boolean(completionTime && consumed < goal);
+      let refreshFailed = false;
       if (isGuest) {
         setLogs((current) => [entry, ...current]);
         setChallenges((current) => {
@@ -593,7 +546,22 @@ function App() {
         });
         if (logError) throw logError;
         completedChallenge = newlyCompleted === true;
-        await loadCloudData(profile.id);
+      }
+      const nextAllowedAt = Date.now() + DRINK_COOLDOWN_MS;
+      setCooldownUntil(nextAllowedAt);
+      setClockNow(Date.now());
+      try {
+        localStorage.setItem(`aqua-bond-drink-cooldown-${profile.id}`, String(nextAllowedAt));
+      } catch (error) {
+        console.error("Could not save the drink cooldown.", error);
+      }
+      if (!isGuest && supabase) {
+        try {
+          await loadCloudData(profile.id);
+        } catch (error) {
+          console.error("The drink was saved, but its latest progress could not be refreshed.", error);
+          refreshFailed = true;
+        }
       }
       if (profile.sound_enabled) {
         try {
@@ -607,11 +575,12 @@ function App() {
           oscillator.onended = () => { void context.close(); };
         } catch (error) { console.error("Could not play the sip sound.", error); }
       }
-      if (completedChallenge) {
+      if (completedChallenge && !refreshFailed) {
         setNotification("You did it! Today's goal is all yours ✨");
         window.setTimeout(() => setNotification(""), 5200);
         if ("Notification" in window && Notification.permission === "granted") new Notification("Goal reached! 💧", { body: "You showed up for yourself today. Your water buddy is cheering you on!" });
-      } else notify(["Nice! Keep going 💙", "A lovely little sip 💧", "Your future self says thanks ✨"][Math.floor(Math.random() * 3)]);
+      } else if (refreshFailed) notify("Your drink was saved, but progress could not refresh. Check your connection.");
+      else notify(["Nice! Keep going 💙", "A lovely little sip 💧", "Your future self says thanks ✨"][Math.floor(Math.random() * 3)]);
     } catch (error) {
       console.error("Could not save your water entry.", error);
       notify(error instanceof Error ? `Couldn't save your sip: ${error.message}` : "Couldn't save your sip. Try again.");
@@ -659,6 +628,10 @@ function App() {
   };
 
   const resetToday = async () => {
+    if (cooldownUntil > Date.now()) {
+      notify("Wait for the drink timer to finish before resetting today's progress.");
+      return;
+    }
     if (!profile || !window.confirm("Remove all of today's water logs? Your earlier history will stay safe.")) return;
     try {
       if (isGuest) {
@@ -725,8 +698,18 @@ function App() {
   };
 
   const requestNotifications = async () => {
-    if (!("Notification" in window)) { notify("This browser doesn't support notifications."); return; }
     try {
+      if (Capacitor.isNativePlatform()) {
+        const { display } = await LocalNotifications.requestPermissions();
+        if (display !== "granted") {
+          notify("Notifications are off. You can enable them in your device settings.");
+          return;
+        }
+        await scheduleDrinkReminder(cooldownUntil);
+        notify("Drink reminders are turned on 💧");
+        return;
+      }
+      if (!("Notification" in window)) { notify("This browser doesn't support notifications."); return; }
       const permission = await Notification.requestPermission();
       notify(permission === "granted" ? "Gentle reminders are turned on 💧" : "Notifications are off. You can enable them in browser settings.");
     } catch (error) {
@@ -734,6 +717,30 @@ function App() {
       notify("Couldn't request notifications. Check your browser settings.");
     }
   };
+
+  const scheduleDrinkReminder = useCallback(async (at: number) => {
+    if (!Capacitor.isNativePlatform() || at <= Date.now()) return;
+    try {
+      const { display } = await LocalNotifications.checkPermissions();
+      if (display !== "granted") return;
+      await LocalNotifications.cancel({ notifications: [{ id: DRINK_REMINDER_NOTIFICATION_ID }] });
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: DRINK_REMINDER_NOTIFICATION_ID,
+          title: "A little water break? 💧",
+          body: "It's been an hour. When you're ready, log your next glass of water.",
+          schedule: { at: new Date(at), allowWhileIdle: true },
+          isExactNotification: false,
+        }],
+      });
+    } catch (error) {
+      console.error("Could not schedule your next-drink reminder.", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (cooldownUntil > Date.now()) void scheduleDrinkReminder(cooldownUntil);
+  }, [cooldownUntil, scheduleDrinkReminder]);
 
   const weekData = useMemo(() => {
     return Array.from({ length: 7 }, (_, index) => {
@@ -767,8 +774,8 @@ function App() {
     return count;
   }, [friendChallenges, today]);
 
-  if (authLoading) return <div className="loading-screen"><div className="loader-drop"><Droplets size={23} /></div><p>Getting Aqua Bond ready</p></div>;
-  if (!profile) return <main className="auth-page"><section className="guest-card"><h1>Couldn’t open Aqua Bond</h1><p>{cloudError || "Your private profile could not be started. Check your connection and try again."}</p><button className="button-primary" onClick={() => window.location.reload()}>Try again <ArrowRight size={16} /></button></section></main>;
+  if (authLoading) return <div className="loading-screen"><RelaxingMusic className="icon-button music-button" /><div className="loader-drop"><Droplets size={23} /></div><p>Getting Aqua Bond ready</p></div>;
+  if (!profile) return <main className="auth-page"><RelaxingMusic className="icon-button music-button" /><section className="guest-card"><h1>Couldn’t open Aqua Bond</h1><p>{cloudError || "Your private profile could not be started. Check your connection and try again."}</p><button className="button-primary" onClick={() => window.location.reload()}>Try again <ArrowRight size={16} /></button></section></main>;
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -781,7 +788,7 @@ function App() {
         </div>
         <div className="topbar-right">
           <div className={`sync-pill ${isGuest ? "sync-local" : "sync-online"}`}><span className="sync-dot" />{isGuest ? "On this device" : isAnonymousAuth ? "Private profile" : "Live together"}</div>
-          <button className={`icon-button music-button ${musicEnabled ? "music-active" : ""}`} onClick={toggleAmbientMusic} aria-label={musicEnabled ? musicState === "waiting" ? "Start relaxing music" : "Turn relaxing music off" : "Play relaxing music"} title={musicEnabled ? musicState === "waiting" ? "Tap to start relaxing music" : "Turn relaxing music off" : "Play relaxing music"}><Music2 size={17} /></button>
+          <RelaxingMusic className="icon-button music-button" />
           <button className="icon-button theme-button" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>{theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}</button>
           <button className="icon-button profile-button" aria-label="Profile settings" onClick={() => setScreen("profile")}><span className="avatar">{profile.display_name.slice(0, 1).toUpperCase()}</span></button>
         </div>
@@ -818,10 +825,10 @@ function App() {
                 </div>
                 <div className="hero-bottle-stage"><div className="stage-halo" /><div className="stage-ring ring-outer" /><div className="stage-ring ring-inner-a" /><Bottle percent={100 - percent} style={bottleStyle} /><div className="bottle-caption"><Sparkles size={12} /> YOUR LITTLE DAILY RESET</div><div className="floating-drop drop-a"><Droplets size={16} /></div><div className="floating-drop drop-b"><Droplets size={11} /></div><div className="floating-drop drop-c"><Droplets size={14} /></div></div>
               </div>
-              <div className="hero-footer"><div className="drink-customizer"><span className="amount-label">YOUR SIP</span><div className="amount-options">{AMOUNTS.map((amount) => <button key={amount} className={drinkAmount === amount ? "selected" : ""} onClick={() => { setDrinkAmount(amount); setCustomAmount(""); }}>{amount} <small>ml</small></button>)}<button className={drinkAmount === -1 ? "selected custom-chip" : "custom-chip"} onClick={() => setDrinkAmount(-1)}><Plus size={13} /> Custom</button></div>{drinkAmount === -1 && <label className="custom-input"><input inputMode="numeric" type="number" min="1" max="5000" value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} placeholder="Enter ml" /><span>ml</span></label>}</div>
-                <button className="drink-button" onClick={() => void logDrink()} disabled={busy}><span className="drink-button-icon"><Droplets size={19} fill="currentColor" /></span><span>I DRANK WATER</span><ArrowRight size={17} /></button>
+              <div className="hero-footer"><div className="drink-customizer"><span className="amount-label">YOUR SIP</span><div className="amount-options">{AMOUNTS.map((amount) => <button key={amount} className={drinkAmount === amount ? "selected" : ""} onClick={() => { setDrinkAmount(amount); setCustomAmount(""); }}>{amount} <small>ml</small></button>)}<button className={drinkAmount === -1 ? "selected custom-chip" : "custom-chip"} onClick={() => setDrinkAmount(-1)}><Plus size={13} /> Custom</button></div>{drinkAmount === -1 && <label className="custom-input"><input inputMode="numeric" type="number" min="1" max={MAX_DRINK_AMOUNT_ML} value={customAmount} onChange={(event) => { setCustomAmount(event.target.value); if (Number(event.target.value) > MAX_DRINK_AMOUNT_ML && Number(customAmount) <= MAX_DRINK_AMOUNT_ML) notify("Don't rush the process, take it bit by bit"); }} placeholder="Enter ml" /><span>ml</span></label>}</div>
+                <div className="drink-action"><button className="drink-button" onClick={() => void logDrink()} disabled={busy || cooldownRemainingMs > 0}><span className="drink-button-icon"><Droplets size={19} fill="currentColor" /></span><span>{cooldownRemainingMs > 0 ? `NEXT SIP IN ${cooldownMinutes}:${String(cooldownSeconds).padStart(2, "0")}` : "I DRANK WATER"}</span><ArrowRight size={17} /></button>{cooldownRemainingMs > 0 && <span className="cooldown-caption" role="timer">Take your time. Your next drink unlocks in {cooldownMinutes}:{String(cooldownSeconds).padStart(2, "0")}.</span>}</div>
               </div>
-              {todayLogs.length > 0 && <button className="undo-link" onClick={() => void undoDrink()} disabled={busy}><ArrowLeft size={13} /> Undo last sip · {formatMl([...todayLogs].sort((a, b) => b.created_at.localeCompare(a.created_at))[0].amount_ml)} ml</button>}
+              {todayLogs.length > 0 && <button className="undo-link" onClick={() => void undoDrink()} disabled={busy || cooldownRemainingMs > 0} title={cooldownRemainingMs > 0 ? "Undo is unavailable until the drink timer ends." : undefined}><ArrowLeft size={13} /> Undo last sip · {formatMl([...todayLogs].sort((a, b) => b.created_at.localeCompare(a.created_at))[0].amount_ml)} ml</button>}
               {notification && <div className="completion-overlay"><div className="confetti-layer">{confettiBits.map((bit) => <i key={bit.id} style={{ left: bit.left, animationDelay: bit.delay, background: bit.color }} />)}</div><button className="close-celebration" aria-label="Close celebration" onClick={() => setNotification("")}><X size={18} /></button><div className="celebration-icon"><Trophy size={30} /></div><span className="eyebrow">DAILY CHALLENGE COMPLETE</span><h3>{notification}</h3><p>You showed up for yourself today. That's something to be proud of.</p><div className="celebration-badge"><span>💧</span> Daily wave maker</div></div>}
             </article>
 
@@ -878,9 +885,9 @@ function App() {
             <article className="glass-card settings-section bottle-customization"><div className="settings-section-head"><div className="settings-icon"><GlassWater size={17} /></div><div><h3>Pick your bottle</h3><p>Choose the shape that feels like yours. It updates your daily bottle.</p></div></div><div className="bottle-presets">{BOTTLE_STYLES.map(({ id, name, detail }) => <button key={id} type="button" className={bottleStyle === id ? "bottle-preset bottle-preset-active" : "bottle-preset"} aria-pressed={bottleStyle === id} onClick={() => setBottleStyle(id)}><span className="bottle-preview"><Bottle percent={34} compact style={id} /></span><b>{name}</b><small>{detail}</small></button>)}</div></article>
             <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon"><Activity size={17} /></div><div><h3>Your daily goal</h3><p>A good place to start is whatever feels right for you.</p></div></div><div className="goal-presets">{[1500, 2000, 2500, 3000].map((amount) => <button key={amount} className={goal === amount ? "goal-selected" : ""} onClick={() => void setGoal(amount)}>{formatMl(amount)} <small>ml</small></button>)}</div><div className="custom-goal-row"><label htmlFor="custom-goal">Or choose your own amount</label><div><input id="custom-goal" type="number" min="500" max="8000" step="100" placeholder={`${goal}`} onKeyDown={(event) => { if (event.key === "Enter") void setGoal(Number((event.target as HTMLInputElement).value)); }} /><span>ml</span><button onClick={(event) => { const input = (event.currentTarget.previousElementSibling?.previousElementSibling as HTMLInputElement); void setGoal(Number(input.value)); }}>Save goal</button></div></div></article>
             <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon reminder-icon"><Bell size={17} /></div><div><h3>A gentle reminder</h3><p>A little nudge, right when you need one.</p></div></div><div className="setting-row"><div className="setting-row-icon"><Clock3 size={16} /></div><div className="setting-row-copy"><b>Daily water break</b><span>{profile.reminder_time ? `A little sip at ${profile.reminder_time}` : "Choose a time for your gentle reminder"}</span></div><input aria-label="Reminder time" type="time" value={profile.reminder_time ?? ""} onChange={(event) => { void persistProfile({ ...profile, reminder_time: event.target.value || null }).then(() => notify(event.target.value ? "Your gentle reminder is set 💧" : "Reminder turned off." )).catch((error: unknown) => { console.error("Could not save reminder time.", error); notify("Couldn't save your reminder time."); }); }} /></div><button className="setting-row setting-button" onClick={() => void requestNotifications()}><div className="setting-row-icon"><Bell size={16} /></div><div className="setting-row-copy"><b>Allow notifications</b><span>Get a nudge even when you're away from the app</span></div><ChevronRight size={16} /></button></article>
-            <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon sound-icon">{profile.sound_enabled ? <Volume2 size={17} /> : <VolumeX size={17} />}</div><div><h3>Little things</h3><p>Make this space feel just like you.</p></div></div><button className="setting-row setting-button" onClick={() => void persistProfile({ ...profile, sound_enabled: !profile.sound_enabled }).then(() => notify(profile.sound_enabled ? "Sip sounds are off." : "Sip sounds are on 💧")).catch((error: unknown) => { console.error("Could not update sound preference.", error); notify("Couldn't update sound preference."); })}><div className="setting-row-icon">{profile.sound_enabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</div><div className="setting-row-copy"><b>Sip sounds</b><span>A tiny, satisfying sound when you log a drink</span></div><div className={`toggle ${profile.sound_enabled ? "toggle-on" : ""}`}><i /></div></button><button className="setting-row setting-button" onClick={toggleAmbientMusic}><div className="setting-row-icon"><Music2 size={16} /></div><div className="setting-row-copy"><b>Relaxing background music</b><span>{musicEnabled ? musicState === "playing" ? "Playing softly" : "Tap to start or turn off" : "Off"}</span></div><div className={`toggle ${musicEnabled ? "toggle-on" : ""}`}><i /></div></button></article>
+            <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon sound-icon">{profile.sound_enabled ? <Volume2 size={17} /> : <VolumeX size={17} />}</div><div><h3>Little things</h3><p>Make this space feel just like you.</p></div></div><button className="setting-row setting-button" onClick={() => void persistProfile({ ...profile, sound_enabled: !profile.sound_enabled }).then(() => notify(profile.sound_enabled ? "Sip sounds are off." : "Sip sounds are on 💧")).catch((error: unknown) => { console.error("Could not update sound preference.", error); notify("Couldn't update sound preference."); })}><div className="setting-row-icon">{profile.sound_enabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</div><div className="setting-row-copy"><b>Sip sounds</b><span>A tiny, satisfying sound when you log a drink</span></div><div className={`toggle ${profile.sound_enabled ? "toggle-on" : ""}`}><i /></div></button></article>
             <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon theme-icon">{theme === "dark" ? <Moon size={17} /> : <Sun size={17} />}</div><div><h3>Your appearance</h3><p>Choose the light that feels comfortable.</p></div></div><button className="setting-row setting-button" onClick={toggleTheme}><div className="setting-row-icon">{theme === "dark" ? <Moon size={16} /> : <Sun size={16} />}</div><div className="setting-row-copy"><b>{theme === "dark" ? "Dark mode" : "Light mode"}</b><span>Tap to switch to {theme === "dark" ? "light" : "dark"} mode</span></div><div className="theme-switch">{theme === "dark" ? "Dark" : "Light"}</div></button></article>
-            <article className="glass-card settings-section challenge-settings"><div className="settings-section-head"><div className="settings-icon"><Waves size={17} /></div><div><h3>Today’s challenge</h3><p>Start fresh without losing your earlier days.</p></div></div><button className="setting-row setting-button reset-row" onClick={() => void resetToday()}><div className="setting-row-icon"><History size={16} /></div><div className="setting-row-copy"><b>Reset today’s progress</b><span>Remove today's logs and keep your history</span></div><ChevronRight size={16} /></button></article>
+            <article className="glass-card settings-section challenge-settings"><div className="settings-section-head"><div className="settings-icon"><Waves size={17} /></div><div><h3>Today’s challenge</h3><p>Start fresh without losing your earlier days.</p></div></div><button className="setting-row setting-button reset-row" onClick={() => void resetToday()} disabled={busy || cooldownRemainingMs > 0}><div className="setting-row-icon"><History size={16} /></div><div className="setting-row-copy"><b>Reset today’s progress</b><span>{cooldownRemainingMs > 0 ? `Available in ${cooldownMinutes}:${String(cooldownSeconds).padStart(2, "0")}` : "Remove today's logs and keep your history"}</span></div><ChevronRight size={16} /></button></article>
           </div>
           <aside className="settings-side">
             {isGuest ? <article className="glass-card invite-card invite-disabled"><div className="invite-decoration"><Users size={21} /></div><span className="card-kicker">BETTER TOGETHER</span><h3>Your people are<br /><span>one sip away.</span></h3><p>Connect this app to Supabase to get a private invite code and connect with multiple friends. No sign-up needed.</p><div className="invite-code"><span>FRIEND SYNC</span><b>Needs Supabase</b><button onClick={() => notify("Add your Supabase project URL and anon/publishable key to .env, then run the setup SQL.")}><CircleHelp size={15} /></button></div></article> : <article className="glass-card invite-card"><div className="invite-decoration"><Users size={21} /></div><span className="card-kicker">YOUR WATER BUDDIES</span><h3>Good habits are<br /><span>better together.</span></h3><p>Share your private code, then connect with other people's invite codes. Connected friends can see each other's progress live.</p><div className="invite-code"><span>YOUR PRIVATE CODE</span><b>{profile.invite_code}</b><button aria-label="Share invite code" onClick={() => void shareInvite()}><Share2 size={15} /></button></div><form className="join-form" onSubmit={(event) => void connectFriend(event)}><input value={inviteEntry} onChange={(event) => setInviteEntry(event.target.value.toUpperCase())} placeholder="Enter their invite code" aria-label="Friend invite code" /><button className="button-primary" disabled={busy}>Connect <ArrowRight size={15} /></button></form><div className="followed-list" aria-live="polite">{friends.length === 0 ? <p className="followed-empty">You haven’t connected with anyone yet. Add your first person above.</p> : friends.map((followed) => { const amount = followed.logs.filter((log) => log.challenge_date === today).reduce((sum, log) => sum + log.amount_ml, 0); const percentComplete = Math.min(100, Math.round((amount / followed.profile.daily_goal_ml) * 100)); return <div className="connected-friend" key={followed.profile.id}><span className="avatar friend-avatar">{followed.profile.display_name.slice(0, 1).toUpperCase()}</span><div><b>{followed.profile.display_name}</b><span>{percentComplete}% of today’s goal</span></div><span className="live-dot" /><button className="disconnect-button" aria-label={`Disconnect from ${followed.profile.display_name}`} onClick={() => void disconnectFriend(followed)}><X size={14} /></button></div>; })}</div></article>}

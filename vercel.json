@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "env": {
+    "VITE_ANDROID_DOWNLOAD_URL": "https://ezihe-building.github.io/aqua-bond/aqua-bond.apk"
+  }
+}

@@ -64,6 +64,7 @@ create table if not exists public.water_logs (
 );
 
 create index if not exists water_logs_user_date_idx on public.water_logs (user_id, challenge_date desc, created_at desc);
+create index if not exists water_logs_user_created_idx on public.water_logs (user_id, created_at desc);
 create index if not exists daily_challenges_date_idx on public.daily_challenges (challenge_date desc);
 
 create or replace function public.refresh_daily_challenge_after_log_change()
@@ -124,8 +125,8 @@ begin
   if current_user_id is null then
     raise exception 'Sign in before logging water.';
   end if;
-  if p_amount_ml is null or p_amount_ml < 1 or p_amount_ml > 5000 then
-    raise exception 'Water amount must be between 1 and 5,000 ml.';
+  if p_amount_ml is null or p_amount_ml < 1 or p_amount_ml > 500 then
+    raise exception 'Water amount must be between 1 and 500 ml.';
   end if;
   if p_challenge_date is null then
     raise exception 'A challenge date is required.';
@@ -133,9 +134,19 @@ begin
 
   select p.daily_goal_ml into current_goal
     from public.profiles p
-    where p.id = current_user_id;
+    where p.id = current_user_id
+    for update;
   if not found then
     raise exception 'Create your Aqua Bond profile before logging water.';
+  end if;
+
+  if exists (
+    select 1
+      from public.water_logs w
+      where w.user_id = current_user_id
+        and w.created_at > now() - interval '1 hour'
+  ) then
+    raise exception 'Please wait one hour between drinks.';
   end if;
 
   insert into public.daily_challenges (user_id, challenge_date, goal_ml)
@@ -232,7 +243,7 @@ create policy "Water logs are visible to self and friend"
 drop policy if exists "Users delete their own water logs" on public.water_logs;
 create policy "Users delete their own water logs"
   on public.water_logs for delete to authenticated
-  using (user_id = (select auth.uid()));
+  using (user_id = (select auth.uid()) and created_at <= now() - interval '1 hour');
 
 create or replace function public.connect_friend(p_invite_code text)
 returns table (friend_id uuid, friend_name text)

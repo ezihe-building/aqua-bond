@@ -4,8 +4,9 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig(({ command }) => {
   const nativeBuild = process.env.CAPACITOR_BUILD === "1";
+  const vercelBuild = process.env.VERCEL === "1";
   return {
-    base: nativeBuild ? "./" : command === "build" ? "/aqua-bond/" : "/",
+    base: nativeBuild ? "./" : vercelBuild ? "/" : command === "build" ? "/aqua-bond/" : "/",
     resolve: {
       alias: nativeBuild ? [{
         find: "/src/main.web.tsx",

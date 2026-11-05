@@ -21,9 +21,12 @@
 .landing-brand b { color: #a7e8dc; font-weight: 500; }
 .landing-nav { display: flex; align-items: center; gap: clamp(20px,3vw,45px); }
 .landing-nav > a { color: rgba(239,248,245,.82); font-size: 12px; font-weight: 600; transition: color .2s ease; }
+.landing-nav > button { color: rgba(239,248,245,.82); font-size: 12px; font-weight: 600; }
 .landing-nav > a:hover { color: #a7e8dc; }
 .landing-nav-cta { min-height: 42px; padding: 0 16px; display: inline-flex; align-items: center; gap: 10px; color: #09201e !important; border: 0; border-radius: 12px; background: linear-gradient(120deg,#c1f3df,#7dd8d8); cursor: pointer; font-size: 12px !important; font-weight: 800; box-shadow: 0 7px 25px rgba(80,204,182,.18); transition: transform .2s ease, box-shadow .2s ease; }
 .landing-nav-cta:hover,.landing-primary-button:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(80,204,182,.29); }
+.landing-music-control { min-width: 36px; height: 36px; display: grid; place-items: center; color: #a7e8dc; border: 1px solid rgba(167,232,220,.2); border-radius: 11px; background: rgba(239,250,247,.07); cursor: pointer; }
+.landing-music-control:hover { background: rgba(239,250,247,.14); }
 .landing-menu-button { display: none; }
 .landing-hero { height: min(810px, 100svh); min-height: 680px; max-height: 920px; position: relative; overflow: hidden; background: #11191a; }
 .hero-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 1s ease; }
@@ -147,6 +150,8 @@
 .get-started-copy { max-width: 490px; margin: 22px auto 0; color: rgba(233,243,237,.8); font-size: 14px; line-height: 1.8; }
 .download-actions { margin-top: 30px; display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap; }
 .download-actions .landing-primary-button { min-width: 205px; }
+.landing-iphone-button { min-height: 54px; padding: 0 19px; display: inline-flex; align-items: center; justify-content: center; gap: 11px; color: rgba(239,248,245,.7); border: 1px solid rgba(232,249,244,.2); border-radius: 15px; background: rgba(239,250,247,.06); font-size: 13px; font-weight: 700; }
+.landing-iphone-button:disabled { cursor: not-allowed; opacity: .72; }
 .install-note { margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 7px; color: rgba(226,240,232,.69); font-size: 10px; }
 .install-note svg { color: #a8e8d9; }
 .download-side-note { position: absolute; right: clamp(23px,6vw,85px); bottom: 28px; left: clamp(23px,6vw,85px); display: flex; justify-content: space-between; color: rgba(226,241,232,.63); font-size: 8px; font-weight: 800; letter-spacing: 1.7px; }
@@ -186,6 +191,7 @@
   .landing-nav { position: absolute; top: 75px; right: 15px; left: 15px; padding: 11px; display: none; align-items: stretch; flex-direction: column; gap: 4px; border: 1px solid rgba(225,246,237,.2); border-radius: 18px; background: rgba(12,21,19,.96); box-shadow: 0 20px 50px rgba(0,0,0,.4); backdrop-filter: blur(22px); }
   .landing-nav-open { display: flex; animation: landing-copy-in .18s ease both; }
   .landing-nav > a { padding: 13px 10px; font-size: 13px; }
+  .landing-nav > button { align-self: flex-start; margin: 8px 10px; }
   .landing-nav-cta { justify-content: center; }
   .landing-hero { height: min(790px,100svh); min-height: 700px; }
   .hero-slide-shade { background: linear-gradient(90deg,rgba(5,13,16,.78),rgba(5,13,16,.44)),linear-gradient(0deg,rgba(5,13,16,.84),transparent 45%,rgba(5,13,16,.18)); }

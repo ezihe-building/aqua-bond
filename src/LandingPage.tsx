@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import {
-  ArrowDown, ArrowRight, ArrowUpRight, Droplets,
+  ArrowDown, ArrowRight, ArrowUpRight, Apple, Droplets,
   Heart, Menu, ShieldCheck, Smartphone, Sparkles, Waves, X,
 } from "lucide-react";
+import RelaxingMusic from "./RelaxingMusic";
 
 const slides = [
   {
@@ -40,7 +41,7 @@ const slides = [
 ];
 
 const features = [
-  { icon: Droplets, number: "01", title: "A sip, made simple", text: "Log a drink in one tap. Your bottle fills as your day does." },
+  { icon: Droplets, number: "01", title: "A sip, made simple", text: "Log a drink in one tap, then take an hour to find your rhythm." },
   { icon: Waves, number: "02", title: "Progress with a pulse", text: "See your rhythm in a day, a week, or all the way back." },
   { icon: Heart, number: "03", title: "Better, together", text: "Bring your people in with a private invite code. Cheer each other on." },
 ];
@@ -49,7 +50,10 @@ export default function LandingPage() {
   const [slideIndex, setSlideIndex] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const currentSlide = slides[slideIndex];
-  const appDownloadUrl = `${import.meta.env.BASE_URL}aqua-bond.apk`;
+  const defaultDownloadUrl = import.meta.env.BASE_URL === "/"
+    ? "https://ezihe-building.github.io/aqua-bond/aqua-bond.apk"
+    : `${import.meta.env.BASE_URL}aqua-bond.apk`;
+  const appDownloadUrl = import.meta.env.VITE_ANDROID_DOWNLOAD_URL || defaultDownloadUrl;
 
   useEffect(() => {
     const timer = window.setInterval(() => setSlideIndex((index) => (index + 1) % slides.length), 7000);
@@ -90,6 +94,7 @@ export default function LandingPage() {
           <a href="#story" onClick={() => setMenuOpen(false)}>Our story</a>
           <a href="#experience" onClick={() => setMenuOpen(false)}>The experience</a>
           <a href="#community" onClick={() => setMenuOpen(false)}>Together</a>
+          <RelaxingMusic className="landing-music-control" />
           <a className="landing-nav-cta" href={appDownloadUrl} download="aqua-bond.apk">Download app <ArrowUpRight size={15} /></a>
         </nav>
       </header>
@@ -174,9 +179,10 @@ export default function LandingPage() {
           <h2>Start where<br /><em>you are.</em></h2>
           <p className="get-started-copy">No perfect streak to start. No big promise to make. Just you, a glass of water, and one small thing for yourself.</p>
           <div className="download-actions">
-            <a className="landing-primary-button" href={appDownloadUrl} download="aqua-bond.apk"><Smartphone size={18} /> Download Aqua Bond <ArrowRight size={17} /></a>
+            <a className="landing-primary-button" href={appDownloadUrl} download="aqua-bond.apk"><Smartphone size={18} /> Android · Download APK <ArrowRight size={17} /></a>
+            <button className="landing-iphone-button" type="button" disabled title="The iPhone app is not yet available on the App Store"><Apple size={18} /> iPhone · Coming soon</button>
           </div>
-          <p className="install-note"><ShieldCheck size={14} /> Android app download. Your private profile stays on your device.</p>
+          <p className="install-note"><ShieldCheck size={14} /> Android is available now. iPhone download will be added after App Store release.</p>
         </div>
         <div className="download-side-note"><span>DESIGNED TO MEET YOU WHERE YOU ARE</span><i>AB—25</i></div>
       </section>
