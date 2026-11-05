@@ -27,6 +27,10 @@ const cloudReady = Boolean(supabaseUrl && supabaseKey);
 const supabase: SupabaseClient | null = cloudReady
   ? createClient(supabaseUrl!, supabaseKey!, { auth: { persistSession: true, autoRefreshToken: true } })
   : null;
+const authRedirectUrl = () => {
+  const configuredUrl = import.meta.env.VITE_SITE_URL as string | undefined;
+  return configuredUrl?.trim() || new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+};
 const MILESTONES = [3, 7, 14, 30, 100];
 const AMOUNTS = [100, 250, 500];
 
@@ -326,6 +330,10 @@ function App() {
     let active = true;
     setAuthLoading(true);
     setCloudError("");
+    const callbackError = new URLSearchParams(window.location.search).get("error_description");
+    if (callbackError) {
+      setAuthError(`Email verification could not finish: ${callbackError}. Request a new email after updating Supabase's redirect URLs.`);
+    }
     supabase.auth.getSession().then(async ({ data, error }) => {
       if (error) console.error("Could not restore the Aqua Bond session.", error);
       if (!active) return;
@@ -390,7 +398,7 @@ function App() {
           const { data, error } = await supabase.auth.updateUser({
             email: authEmail.trim(),
             data: { display_name: displayName, aqua_bond_password_pending: true },
-          }, { emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString() });
+          }, { emailRedirectTo: authRedirectUrl() });
           if (error) throw error;
           if (!data.user) throw new Error("Supabase did not return your updated account.");
           await persistProfile({ ...profile, display_name: displayName });
@@ -404,7 +412,7 @@ function App() {
             password: authPassword,
             options: {
               data: { display_name: displayName },
-              emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
+              emailRedirectTo: authRedirectUrl(),
             },
           });
           if (error) throw error;
@@ -929,7 +937,6 @@ function AuthWelcome({
       </button>
       <div className="guest-card auth-welcome-card">
         <a className="brand auth-brand" href="#"><span className="brand-mark"><Droplets size={18} /></span><span>aqua<span className="brand-light">bond</span></span></a>
-        <div className="auth-illustration"><Bottle percent={76} /><Sparkles className="auth-sparkle sparkle-a" /><Sparkles className="auth-sparkle sparkle-b" /></div>
         <p className="eyebrow">{hasAnonymousProfile || needsUpgradePassword ? "KEEP YOUR WATER STORY SAFE" : "A LITTLE WATER. A LOT MORE TOGETHER."}</p>
         <h1>{hasAnonymousProfile ? <>Make your profile<br /><span>yours alone.</span></> : settingPassword ? <>One last little<br /><span>step.</span></> : signingUp ? <>A softer way to<br /><span>stay hydrated.</span></> : <>Welcome <span>back.</span></>}</h1>
         <p className="auth-subtitle">{hasAnonymousProfile ? "Verify your email first; your progress and friends stay on this profile." : settingPassword ? "Your email is verified. Set a password to finish securing your existing profile." : "Your own private account keeps your water story separate on every device."}</p>

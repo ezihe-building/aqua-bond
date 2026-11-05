@@ -8,7 +8,7 @@ Aqua Bond is a mobile-first hydration challenge with individual email/password a
 2. In your Supabase project, enable **Authentication → Sign In / Providers → Email** and **manual identity linking**. Keep Anonymous Sign-Ins enabled temporarily if existing anonymous profiles still need upgrading.
 3. Copy `.env.example` to `.env` and add the project URL and publishable (anon) key from **Project Settings → API**.
 4. Run the SQL in [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL editor.
-5. In **Authentication → URL Configuration**, set the Site URL to your deployed site and add both the deployed site and `http://localhost:5173/**` to the allowed redirect URLs.
+5. In **Authentication → URL Configuration**, set the Site URL to `https://ezihe-building.github.io/aqua-bond/` and add `https://ezihe-building.github.io/aqua-bond/**` and `http://localhost:5173/**` to the allowed redirect URLs. Keep confirmation email templates pointed at `{{ .ConfirmationURL }}`; do not hardcode a localhost URL.
 6. Start the app with `npm run dev`.
 
 On the first visit, create an account or sign in. Existing anonymous sessions are asked to add an email, verify it, and then choose a password; this secures that same profile without losing its progress or friend links. A new account may also require email confirmation before sign-in. Sign out from **You** before another person uses the same browser/device. Share your invite code and enter other people's codes in **You** to connect; connected friends can see each other's hydration progress.
@@ -25,4 +25,4 @@ Run `npm run build` to type-check and create the production app in `dist/`.
 
 ## Deploy to GitHub Pages
 
-The `main` branch deploys to GitHub Pages through the workflow in `.github/workflows/deploy.yml`. The workflow reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the repository's Actions variables. The Supabase publishable key is included in the browser app by design; database access must remain protected by the row-level security policies in `supabase/schema.sql`. Never use a `service_role` or secret key in this frontend.
+The `main` branch deploys to GitHub Pages through the workflow in `.github/workflows/deploy.yml`. The workflow reads `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_SITE_URL` from the repository's Actions variables; set `VITE_SITE_URL` to `https://ezihe-building.github.io/aqua-bond/` so verification links return to the deployed app. The Supabase publishable key is included in the browser app by design; database access must remain protected by the row-level security policies in `supabase/schema.sql`. Never use a `service_role` or secret key in this frontend.
