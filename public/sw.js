@@ -1,4 +1,4 @@
-const CACHE = "aqua-bond-v5";
+const CACHE = "aqua-bond-v6";
 const APP_ROOT = new URL("./", self.location.href).toString();
 const CORE = [APP_ROOT, new URL("manifest.webmanifest", APP_ROOT).toString(), new URL("drop.svg", APP_ROOT).toString()];
 
