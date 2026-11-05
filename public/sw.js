@@ -1,10 +1,14 @@
-const CACHE = "aqua-bond-v6";
+const CACHE = "aqua-bond-v7";
 const APP_ROOT = new URL("./", self.location.href).toString();
-const CORE = [APP_ROOT, new URL("manifest.webmanifest", APP_ROOT).toString(), new URL("drop.svg", APP_ROOT).toString()];
+const CORE = [APP_ROOT, new URL("manifest.webmanifest", APP_ROOT).toString(), new URL("drop.svg", APP_ROOT).toString(), new URL("water-ripples.jpg", APP_ROOT).toString()];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(CORE)));
-  self.skipWaiting();
+  if (!self.registration.active) self.skipWaiting();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", (event) => {

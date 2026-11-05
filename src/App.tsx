@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import {
-  Activity, ArrowLeft, ArrowRight, Bell, Check, CheckCircle2, ChevronRight,
-  CircleHelp, Clock3, Droplets, Flame, GlassWater, Heart, History, Music2, Plus,
+  Activity, ArrowLeft, ArrowRight, Bell, Check, CheckCircle2, ChevronDown, ChevronRight,
+  CircleHelp, Clock3, Droplets, Flame, GlassWater, Heart, History, Menu, Music2, Plus,
   Moon, Share2, ShieldCheck, Sparkles, Sun, Trophy, UserRound, Users, Volume2, VolumeX, Waves, X,
+  RefreshCw, type LucideIcon,
 } from "lucide-react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -19,6 +20,7 @@ type DailyChallenge = { challenge_date: string; goal_ml: number; completed_at: s
 type FriendLink = { id: string; user_id: string; friend_id: string };
 type FriendProgress = { link: FriendLink; profile: Profile; logs: WaterLog[]; challenges: DailyChallenge[] };
 type Screen = "home" | "history" | "achievements" | "profile";
+type BottleStyle = "classic" | "sport" | "glass" | "flask" | "wide";
 type LevelStyle = CSSProperties & { "--level": string };
 type ProgressStyle = CSSProperties & { "--progress": string };
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -29,6 +31,12 @@ const supabase: SupabaseClient | null = cloudReady
   : null;
 const MILESTONES = [3, 7, 14, 30, 100];
 const AMOUNTS = [100, 250, 500];
+const NAVIGATION_ITEMS: { id: Screen; label: string; icon: LucideIcon }[] = [
+  { id: "home", label: "Today", icon: Droplets },
+  { id: "history", label: "History", icon: History },
+  { id: "achievements", label: "Milestones", icon: Trophy },
+  { id: "profile", label: "Customize", icon: UserRound },
+];
 
 const dateKey = (date = new Date()) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -44,6 +52,14 @@ const relativeDays = (count: number) => {
 const makeId = () => crypto.randomUUID();
 const MUSIC_PREFERENCE_KEY = "aqua-bond-ambient-music";
 const THEME_PREFERENCE_KEY = "aqua-bond-theme";
+const BOTTLE_PREFERENCE_KEY = "aqua-bond-bottle-style";
+const BOTTLE_STYLES: { id: BottleStyle; name: string; detail: string }[] = [
+  { id: "classic", name: "Classic", detail: "Everyday glass" },
+  { id: "sport", name: "Sport", detail: "Easy-grip shape" },
+  { id: "glass", name: "Glass", detail: "Tapered bottle" },
+  { id: "flask", name: "Flask", detail: "Clean and sturdy" },
+  { id: "wide", name: "Wide", detail: "Room for more" },
+];
 
 function getMusicPreference() {
   try {
@@ -63,10 +79,20 @@ function getThemePreference(): "dark" | "light" {
   }
 }
 
-function Bottle({ percent, compact = false, hue = "blue" }: { percent: number; compact?: boolean; hue?: "blue" | "purple" }) {
+function getBottlePreference(): BottleStyle {
+  try {
+    const saved = localStorage.getItem(BOTTLE_PREFERENCE_KEY);
+    return BOTTLE_STYLES.some((style) => style.id === saved) ? saved as BottleStyle : "classic";
+  } catch (error) {
+    console.error("Could not read the bottle style preference.", error);
+    return "classic";
+  }
+}
+
+function Bottle({ percent, compact = false, hue = "blue", style = "classic" }: { percent: number; compact?: boolean; hue?: "blue" | "purple"; style?: BottleStyle }) {
   const amount = Math.max(0, Math.min(100, percent));
   return (
-    <div className={`bottle-wrap ${compact ? "bottle-compact" : ""} bottle-${hue}`} style={{ "--level": `${100 - amount}%` } as LevelStyle}>
+    <div className={`bottle-wrap ${compact ? "bottle-compact" : ""} bottle-${hue} bottle-shape-${style}`} style={{ "--level": `${100 - amount}%` } as LevelStyle}>
       <div className="bottle-glow" />
       <div className="bottle-cap"><span /></div>
       <div className="bottle-neck" />
@@ -106,11 +132,17 @@ function App() {
   const [inviteEntry, setInviteEntry] = useState("");
   const [busy, setBusy] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationMenuRef = useRef<HTMLDivElement | null>(null);
+  const [updateReady, setUpdateReady] = useState(false);
+  const waitingWorker = useRef<ServiceWorker | null>(null);
+  const refreshingForUpdate = useRef(false);
   const friendCompletionState = useRef<Map<string, boolean>>(new Map());
   const [musicEnabled, setMusicEnabled] = useState(getMusicPreference);
   const [musicState, setMusicState] = useState<"off" | "waiting" | "playing">(musicEnabled ? "waiting" : "off");
   const ambientAudio = useRef<AudioContext | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(getThemePreference);
+  const [bottleStyle, setBottleStyle] = useState<BottleStyle>(getBottlePreference);
   const [today, setToday] = useState(dateKey());
   const confettiBits = useMemo(() => Array.from({ length: 34 }, (_, index) => ({ id: index, left: `${(index * 37) % 100}%`, delay: `${(index % 9) * 0.11}s`, color: ["#71e7ff", "#83a8ff", "#a988ff", "#fff", "#50caff"][index % 5] })), []);
   const todayLogs = logs.filter((log) => log.challenge_date === today);
@@ -161,6 +193,15 @@ function App() {
       console.error("Could not save the theme preference.", error);
     }
   }, [theme]);
+
+  useEffect(() => {
+    if (!navigationOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node && !navigationMenuRef.current?.contains(event.target)) setNavigationOpen(false);
+    };
+    window.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => window.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [navigationOpen]);
 
   const toggleTheme = () => setTheme((current) => current === "dark" ? "light" : "dark");
 
@@ -442,6 +483,37 @@ function App() {
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
+  useEffect(() => {
+    const handleUpdateReady = (event: Event) => {
+      waitingWorker.current = (event as CustomEvent<ServiceWorker>).detail;
+      setUpdateReady(true);
+    };
+    const handleControllerChange = () => {
+      if (!waitingWorker.current || refreshingForUpdate.current) return;
+      refreshingForUpdate.current = true;
+      window.location.reload();
+    };
+    window.addEventListener("aquabond:sw-update", handleUpdateReady);
+    navigator.serviceWorker?.addEventListener("controllerchange", handleControllerChange);
+    return () => {
+      window.removeEventListener("aquabond:sw-update", handleUpdateReady);
+      navigator.serviceWorker?.removeEventListener("controllerchange", handleControllerChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(BOTTLE_PREFERENCE_KEY, bottleStyle);
+    } catch (error) {
+      console.error("Could not save the bottle style preference.", error);
+    }
+  }, [bottleStyle]);
+
+  const applyAppUpdate = () => {
+    if (!waitingWorker.current) return;
+    waitingWorker.current.postMessage({ type: "SKIP_WAITING" });
+  };
+
   const persistProfile = async (updated: Profile) => {
     if (!isGuest && supabase) {
       const { error } = await supabase.from("profiles").update({
@@ -672,19 +744,27 @@ function App() {
     return count;
   }, [friendChallenges, today]);
 
-  if (authLoading) return <div className="loading-screen"><div className="loader-drop"><Droplets size={23} /></div><p>Preparing Aqua Bond…</p></div>;
+  if (authLoading) return <div className="loading-screen"><div className="loader-drop"><Droplets size={23} /></div><p>Getting Aqua Bond ready</p></div>;
   if (!profile) return <main className="auth-page"><section className="guest-card"><h1>Couldn’t open Aqua Bond</h1><p>{cloudError || "Your private profile could not be started. Check your connection and try again."}</p><button className="button-primary" onClick={() => window.location.reload()}>Try again <ArrowRight size={16} /></button></section></main>;
   return (
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#" onClick={(event) => { event.preventDefault(); setScreen("home"); }}><span className="brand-mark"><Droplets size={18} /></span><span>aqua<span className="brand-light">bond</span></span></a>
+        <div className="navigation-menu" ref={navigationMenuRef} onKeyDown={(event) => { if (event.key === "Escape") setNavigationOpen(false); }}>
+          <button className="navigation-toggle" type="button" aria-haspopup="menu" aria-expanded={navigationOpen} onClick={() => setNavigationOpen((open) => !open)}>
+            <Menu size={17} /><span>{NAVIGATION_ITEMS.find((item) => item.id === screen)?.label ?? "Today"}</span><ChevronDown size={15} />
+          </button>
+          {navigationOpen && <div className="navigation-dropdown" role="menu">{NAVIGATION_ITEMS.map(({ id, label, icon: Icon }) => <button key={id} type="button" role="menuitem" className={screen === id ? "navigation-selected" : ""} onClick={() => { setScreen(id); setNavigationOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Icon size={17} /><span>{label}</span>{screen === id && <Check size={15} />}</button>)}</div>}
+        </div>
         <div className="topbar-right">
-          <div className={`sync-pill ${isGuest ? "sync-local" : "sync-online"}`}><span className="sync-dot" />{isGuest ? "On this device" : "Live together"}</div>
+          <div className={`sync-pill ${isGuest ? "sync-local" : "sync-online"}`}><span className="sync-dot" />{isGuest ? "On this device" : isAnonymousAuth ? "Private profile" : "Live together"}</div>
           <button className={`icon-button music-button ${musicEnabled ? "music-active" : ""}`} onClick={toggleAmbientMusic} aria-label={musicEnabled ? musicState === "waiting" ? "Start relaxing music" : "Turn relaxing music off" : "Play relaxing music"} title={musicEnabled ? musicState === "waiting" ? "Tap to start relaxing music" : "Turn relaxing music off" : "Play relaxing music"}><Music2 size={17} /></button>
           <button className="icon-button theme-button" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>{theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}</button>
           <button className="icon-button profile-button" aria-label="Profile settings" onClick={() => setScreen("profile")}><span className="avatar">{profile.display_name.slice(0, 1).toUpperCase()}</span></button>
         </div>
       </header>
+
+      {updateReady && <div className="update-banner" role="status"><span><RefreshCw size={17} /> A fresh Aqua Bond update is ready.</span><button type="button" onClick={applyAppUpdate}>Update now</button></div>}
 
       {isGuest && <div className="local-banner"><CircleHelp size={15} /><span>Local mode · your data stays on this device. <b>Supabase enables friend sync.</b></span>{!cloudReady && <button onClick={() => notify("Add your Supabase project URL and anon/publishable key to .env, then run the setup SQL.")}>How to connect?</button>}</div>}
 
@@ -693,6 +773,14 @@ function App() {
           <div><p className="date-label">{displayDate()}</p><h1>{screen === "home" ? <>A little more <span>you</span> time.</> : screen === "history" ? <>Your hydration <span>story.</span></> : screen === "achievements" ? <>Look at you <span>glow.</span></> : <>Your little <span>corner.</span></>}</h1><p className="welcome-sub">{screen === "home" ? "Small sips add up. Let’s make today feel good." : screen === "history" ? "Every little sip is a step in the right direction." : screen === "achievements" ? "Every day you show up is worth celebrating." : "Make Aqua Bond feel like yours."}</p></div>
           <button className="streak-chip" onClick={() => setScreen("achievements")}><span className="streak-flame"><Flame size={18} fill="currentColor" /></span><span><b>{streak} day{streak === 1 ? "" : "s"}</b><small>current streak</small></span><ChevronRight size={15} /></button>
         </section>
+
+        {screen === "home" && <section className="water-film-card" aria-label="Water sounds and scenery">
+          <video className="water-film" controls loop muted playsInline preload="none" poster={`${import.meta.env.BASE_URL}water-ripples.jpg`} aria-label="Looping close-up video of clear blue water rippling">
+            <source src="https://videos.pexels.com/video-files/855589/855589-hd_1920_1080_25fps.mp4" type="video/mp4" />
+            Your browser does not support this video.
+          </video>
+          <div className="water-film-copy"><span><Waves size={16} /> A MOMENT OF CALM</span><strong>Find your flow.</strong><a href="https://www.pexels.com/video/blue-water-rippling-on-surface-855589/" target="_blank" rel="noreferrer">Water video via Pexels</a></div>
+        </section>}
 
         {screen === "home" && <>
           <section className="dashboard-grid">
@@ -705,7 +793,7 @@ function App() {
                   <div className="stat-line"><span><i className="stat-dot consumed-dot" />Drunk</span><b>{formatMl(consumed)} <small>ml</small></b></div>
                   <div className="stat-line"><span><i className="stat-dot remaining-dot" />To go</span><b>{formatMl(remaining)} <small>ml</small></b></div>
                 </div>
-                <div className="hero-bottle-stage"><div className="stage-halo" /><div className="stage-ring ring-outer" /><div className="stage-ring ring-inner-a" /><Bottle percent={100 - percent} /><div className="bottle-caption"><Sparkles size={12} /> YOUR LITTLE DAILY RESET</div><div className="floating-drop drop-a"><Droplets size={16} /></div><div className="floating-drop drop-b"><Droplets size={11} /></div><div className="floating-drop drop-c"><Droplets size={14} /></div></div>
+                <div className="hero-bottle-stage"><div className="stage-halo" /><div className="stage-ring ring-outer" /><div className="stage-ring ring-inner-a" /><Bottle percent={100 - percent} style={bottleStyle} /><div className="bottle-caption"><Sparkles size={12} /> YOUR LITTLE DAILY RESET</div><div className="floating-drop drop-a"><Droplets size={16} /></div><div className="floating-drop drop-b"><Droplets size={11} /></div><div className="floating-drop drop-c"><Droplets size={14} /></div></div>
               </div>
               <div className="hero-footer"><div className="drink-customizer"><span className="amount-label">YOUR SIP</span><div className="amount-options">{AMOUNTS.map((amount) => <button key={amount} className={drinkAmount === amount ? "selected" : ""} onClick={() => { setDrinkAmount(amount); setCustomAmount(""); }}>{amount} <small>ml</small></button>)}<button className={drinkAmount === -1 ? "selected custom-chip" : "custom-chip"} onClick={() => setDrinkAmount(-1)}><Plus size={13} /> Custom</button></div>{drinkAmount === -1 && <label className="custom-input"><input inputMode="numeric" type="number" min="1" max="5000" value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} placeholder="Enter ml" /><span>ml</span></label>}</div>
                 <button className="drink-button" onClick={() => void logDrink()} disabled={busy}><span className="drink-button-icon"><Droplets size={19} fill="currentColor" /></span><span>I DRANK WATER</span><ArrowRight size={17} /></button>
@@ -765,6 +853,7 @@ function App() {
           <div className="settings-main">
             <article className="glass-card settings-profile"><div className="settings-avatar">{profile.display_name.slice(0, 1).toUpperCase()}<span><Check size={11} /></span></div><div className="settings-person"><span className="card-kicker">{isAnonymousAuth ? "YOUR DEVICE PROFILE" : "YOUR AQUA BOND PROFILE"}</span><h2>{profile.display_name}</h2><p>{isAnonymousAuth ? "Saved to this browser. Clearing browser data may remove access to this profile." : "Showing up for yourself, beautifully."}</p></div><div className="profile-streak"><Flame size={16} fill="currentColor" /><b>{streak}</b><span>day streak</span></div></article>
             <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon"><UserRound size={17} /></div><div><h3>Your name</h3><p>Choose the name your water buddy sees.</p></div></div><div className="custom-goal-row name-row"><label htmlFor="display-name">Display name</label><div><input id="display-name" type="text" maxLength={32} value={nameEntry ?? profile.display_name} onChange={(event) => setNameEntry(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveDisplayName(); }} /><button onClick={() => void saveDisplayName()}>Save name</button></div></div></article>
+            <article className="glass-card settings-section bottle-customization"><div className="settings-section-head"><div className="settings-icon"><GlassWater size={17} /></div><div><h3>Pick your bottle</h3><p>Choose the shape that feels like yours. It updates your daily bottle.</p></div></div><div className="bottle-presets">{BOTTLE_STYLES.map(({ id, name, detail }) => <button key={id} type="button" className={bottleStyle === id ? "bottle-preset bottle-preset-active" : "bottle-preset"} aria-pressed={bottleStyle === id} onClick={() => setBottleStyle(id)}><span className="bottle-preview"><Bottle percent={34} compact style={id} /></span><b>{name}</b><small>{detail}</small></button>)}</div></article>
             <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon"><Activity size={17} /></div><div><h3>Your daily goal</h3><p>A good place to start is whatever feels right for you.</p></div></div><div className="goal-presets">{[1500, 2000, 2500, 3000].map((amount) => <button key={amount} className={goal === amount ? "goal-selected" : ""} onClick={() => void setGoal(amount)}>{formatMl(amount)} <small>ml</small></button>)}</div><div className="custom-goal-row"><label htmlFor="custom-goal">Or choose your own amount</label><div><input id="custom-goal" type="number" min="500" max="8000" step="100" placeholder={`${goal}`} onKeyDown={(event) => { if (event.key === "Enter") void setGoal(Number((event.target as HTMLInputElement).value)); }} /><span>ml</span><button onClick={(event) => { const input = (event.currentTarget.previousElementSibling?.previousElementSibling as HTMLInputElement); void setGoal(Number(input.value)); }}>Save goal</button></div></div></article>
             <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon reminder-icon"><Bell size={17} /></div><div><h3>A gentle reminder</h3><p>A little nudge, right when you need one.</p></div></div><div className="setting-row"><div className="setting-row-icon"><Clock3 size={16} /></div><div className="setting-row-copy"><b>Daily water break</b><span>{profile.reminder_time ? `A little sip at ${profile.reminder_time}` : "Choose a time for your gentle reminder"}</span></div><input aria-label="Reminder time" type="time" value={profile.reminder_time ?? ""} onChange={(event) => { void persistProfile({ ...profile, reminder_time: event.target.value || null }).then(() => notify(event.target.value ? "Your gentle reminder is set 💧" : "Reminder turned off." )).catch((error: unknown) => { console.error("Could not save reminder time.", error); notify("Couldn't save your reminder time."); }); }} /></div><button className="setting-row setting-button" onClick={() => void requestNotifications()}><div className="setting-row-icon"><Bell size={16} /></div><div className="setting-row-copy"><b>Allow notifications</b><span>Get a nudge even when you're away from the app</span></div><ChevronRight size={16} /></button></article>
             <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon sound-icon">{profile.sound_enabled ? <Volume2 size={17} /> : <VolumeX size={17} />}</div><div><h3>Little things</h3><p>Make this space feel just like you.</p></div></div><button className="setting-row setting-button" onClick={() => void persistProfile({ ...profile, sound_enabled: !profile.sound_enabled }).then(() => notify(profile.sound_enabled ? "Sip sounds are off." : "Sip sounds are on 💧")).catch((error: unknown) => { console.error("Could not update sound preference.", error); notify("Couldn't update sound preference."); })}><div className="setting-row-icon">{profile.sound_enabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</div><div className="setting-row-copy"><b>Sip sounds</b><span>A tiny, satisfying sound when you log a drink</span></div><div className={`toggle ${profile.sound_enabled ? "toggle-on" : ""}`}><i /></div></button><button className="setting-row setting-button" onClick={toggleAmbientMusic}><div className="setting-row-icon"><Music2 size={16} /></div><div className="setting-row-copy"><b>Relaxing background music</b><span>{musicEnabled ? musicState === "playing" ? "Playing softly" : "Tap to start or turn off" : "Off"}</span></div><div className={`toggle ${musicEnabled ? "toggle-on" : ""}`}><i /></div></button></article>
