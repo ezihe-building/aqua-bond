@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="glass" x1="20" y1="8" x2="105" y2="122" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#b5f7ff"/>
+      <stop offset=".52" stop-color="#65d5ed"/>
+      <stop offset="1" stop-color="#5a82f5"/>
+    </linearGradient>
+    <linearGradient id="water" x1="32" y1="67" x2="95" y2="110" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a1f4f3"/>
+      <stop offset="1" stop-color="#5792fa"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="38" fill="#09121f"/>
+  <rect x="5" y="5" width="118" height="118" rx="37" stroke="#a9efff" stroke-opacity=".2" stroke-width="2"/>
+  <path d="M66 21c-3.1 0-5.8 1.8-7.2 4.2L35.7 65.5A25.4 25.4 0 0 0 58 104.1h16a25.4 25.4 0 0 0 22.3-38.6L73.2 25.2A8.3 8.3 0 0 0 66 21Z" fill="url(#glass)" fill-opacity=".2" stroke="url(#glass)" stroke-width="4"/>
+  <path d="M42 70.2a22 22 0 0 0 17 33.9h15a22 22 0 0 0 19-33.9c-10.4-5.2-15.5 3.3-25.9 1.8-10.5-1.6-15-8-25.1-1.8Z" fill="url(#water)" fill-opacity=".88"/>
+  <path d="M47 64.5c5.8 4 10.1 5.2 17 5.2 8.3 0 13.2-5.1 21-4.1" fill="none" stroke="#e2ffff" stroke-linecap="round" stroke-opacity=".8" stroke-width="3"/>
+  <path d="M65 36c-1.5 2.4-3 4.1-3 6.4a4.2 4.2 0 0 0 8.4 0c0-2.3-1.5-4-3-6.4a1.4 1.4 0 0 0-2.4 0Z" fill="#eaffff"/>
+</svg>

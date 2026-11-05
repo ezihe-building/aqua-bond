@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Aqua Bond</string>
+    <string name="title_activity_main">Aqua Bond</string>
+    <string name="package_name">com.aquabond.app</string>
+    <string name="custom_url_scheme">com.aquabond.app</string>
+</resources>

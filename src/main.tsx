@@ -1,9 +1,15 @@
-import React from "react";
+import { StrictMode, lazy, Suspense, useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import { Capacitor } from "@capacitor/core";
 import "./styles.css";
+import "./landing.css";
 
-if ("serviceWorker" in navigator) {
+const App = lazy(() => import("./App"));
+const LandingPage = lazy(() => import("./LandingPage"));
+const isNativeApp = Capacitor.isNativePlatform();
+if (isNativeApp && window.location.hash !== "#/app") window.location.hash = "#/app";
+
+if ("serviceWorker" in navigator && !isNativeApp) {
   window.addEventListener("load", () => {
     void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).then((registration) => {
       const announceWaitingWorker = () => {
@@ -33,8 +39,22 @@ if ("serviceWorker" in navigator) {
   });
 }
 
+function ApplicationRouter() {
+  const [isTrackerRoute, setIsTrackerRoute] = useState(isNativeApp || window.location.hash === "#/app");
+  useEffect(() => {
+    const updateRoute = () => setIsTrackerRoute(isNativeApp || window.location.hash === "#/app");
+    window.addEventListener("hashchange", updateRoute);
+    return () => window.removeEventListener("hashchange", updateRoute);
+  }, []);
+  return (
+    <Suspense fallback={<div className="app-startup" role="status">AQUA BOND</div>}>
+      {isTrackerRoute ? <App /> : <LandingPage />}
+    </Suspense>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  <StrictMode>
+    <ApplicationRouter />
+  </StrictMode>,
 );

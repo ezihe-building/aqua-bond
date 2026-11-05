@@ -2,7 +2,7 @@
   "name": "Aqua Bond",
   "short_name": "Aqua Bond",
   "description": "Make hydration feel good with Aqua Bond: track sips, build streaks, and cheer on your people.",
-  "start_url": "./",
+  "start_url": "./#/app",
   "display": "standalone",
   "background_color": "#070b13",
   "theme_color": "#070b13",
