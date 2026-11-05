@@ -1,5 +1,6 @@
 const CACHE = "aqua-bond-v2";
-const CORE = ["/", "/manifest.webmanifest", "/drop.svg"];
+const APP_ROOT = new URL("./", self.location.href).toString();
+const CORE = [APP_ROOT, new URL("manifest.webmanifest", APP_ROOT).toString(), new URL("drop.svg", APP_ROOT).toString()];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(CORE)));
@@ -28,7 +29,7 @@ self.addEventListener("fetch", (event) => {
       const cached = await caches.match(event.request);
       if (cached) return cached;
       if (event.request.mode === "navigate") {
-        const shell = await caches.match("/");
+        const shell = await caches.match(APP_ROOT);
         if (shell) return shell;
       }
       return Response.error();

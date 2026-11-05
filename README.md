@@ -21,3 +21,7 @@ The app includes a web app manifest and service worker for installation and cach
 ## Build
 
 Run `npm run build` to type-check and create the production app in `dist/`.
+
+## Deploy to GitHub Pages
+
+The `main` branch deploys to GitHub Pages through the workflow in `.github/workflows/deploy.yml`. The workflow reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the repository's Actions variables. The Supabase publishable key is included in the browser app by design; database access must remain protected by the row-level security policies in `supabase/schema.sql`. Never use a `service_role` or secret key in this frontend.
