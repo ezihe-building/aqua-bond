@@ -31,6 +31,13 @@ const authRedirectUrl = () => {
   const configuredUrl = import.meta.env.VITE_SITE_URL as string | undefined;
   return configuredUrl?.trim() || new URL(import.meta.env.BASE_URL, window.location.origin).toString();
 };
+const authenticationErrorMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message : "Couldn't complete that request. Please try again.";
+  if (/rate.?limit|too many requests/i.test(message)) {
+    return "Supabase temporarily blocked verification emails because its built-in sender is limited to 2 emails per hour. Wait for the hourly limit to reset before trying again. For reliable sign-ups, configure custom SMTP in Supabase Dashboard → Authentication → SMTP Settings. Your account may already have been created, so don't submit the sign-up form repeatedly.";
+  }
+  return message;
+};
 const MILESTONES = [3, 7, 14, 30, 100];
 const AMOUNTS = [100, 250, 500];
 
@@ -435,7 +442,7 @@ function App() {
       }
     } catch (error) {
       console.error("Could not complete authentication.", error);
-      setAuthError(error instanceof Error ? error.message : "Couldn't complete that request. Please try again.");
+      setAuthError(authenticationErrorMessage(error));
     } finally {
       setBusy(false);
     }
