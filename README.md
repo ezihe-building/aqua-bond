@@ -1,19 +1,17 @@
 # Aqua Bond
 
-Aqua Bond is a mobile-first hydration challenge with individual email/password accounts, saved history, invite-code friend connections, and live progress. Each person signs in to their own account; sharing the website link does not share the current user's data. Existing anonymous profiles can be upgraded with an email and password without losing their history or connections.
+Aqua Bond is a mobile-first hydration challenge with saved history, invite-code friend connections, and live progress. No signup or login is required. The app creates a private anonymous profile automatically and keeps its session in the current browser.
 
 ## Run locally
 
 1. Install dependencies with `npm install`.
-2. In your Supabase project, enable **Authentication → Sign In / Providers → Email** and turn **Confirm email** off for immediate signup without verification emails. Keep Anonymous Sign-Ins and **manual identity linking** enabled only if existing anonymous profiles still need upgrading.
+2. In your Supabase project, enable **Authentication → Sign In / Providers → Allow anonymous sign-ins**. This is required for the app to create a private profile without a signup screen.
 3. Copy `.env.example` to `.env` and add the project URL and publishable (anon) key from **Project Settings → API**.
 4. Run the SQL in [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL editor.
-5. In **Authentication → URL Configuration**, set the Site URL to `https://ezihe-building.github.io/aqua-bond/` and add `https://ezihe-building.github.io/aqua-bond/**` and `http://localhost:5173/**` to the allowed redirect URLs for existing-profile email upgrades.
+5. In **Authentication → URL Configuration**, set the Site URL to `https://ezihe-building.github.io/aqua-bond/`.
 6. Start the app with `npm run dev`.
 
-With **Confirm email** turned off, new accounts are created and signed in immediately without verification emails. The email address is not verified, so users may be unable to recover an account through email until email delivery is configured. For email verification and reliable password recovery, configure a transactional email provider under **Authentication → SMTP Settings** and then re-enable **Confirm email**.
-
-On the first visit, create an account or sign in. New email/password accounts are signed in immediately. Legacy anonymous sessions can still be upgraded; Supabase may require email verification for that email change. Sign out from **You** before another person uses the same browser/device. Share your invite code and enter other people's codes in **You** to connect; connected friends can see each other's hydration progress.
+The first visit creates a profile automatically. Profiles are private to the browser/device that created them; clearing browser data or switching devices may make an anonymous profile inaccessible. Share your invite code and enter other people's codes in **You** to connect; connected friends can see each other's hydration progress. There is no email signup, login, password recovery, or profile transfer in this version.
 
 The Supabase schema enables row-level security for profiles, friend links, daily challenges, and water logs. The `connect_friend` function validates invite codes without making other users' profiles publicly searchable. To update an existing project, rerun the latest [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL editor; it preserves existing profiles and friend links while removing the one-friend limit. **Never put a Supabase `service_role` or secret key in this app.** Only the publishable/anon key belongs in `.env`; database writes are restricted by the SQL policies and server functions.
 
@@ -27,4 +25,4 @@ Run `npm run build` to type-check and create the production app in `dist/`.
 
 ## Deploy to GitHub Pages
 
-The `main` branch deploys to GitHub Pages through the workflow in `.github/workflows/deploy.yml`. The workflow reads `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_SITE_URL` from the repository's Actions variables; set `VITE_SITE_URL` to `https://ezihe-building.github.io/aqua-bond/` so verification links return to the deployed app. The Supabase publishable key is included in the browser app by design; database access must remain protected by the row-level security policies in `supabase/schema.sql`. Never use a `service_role` or secret key in this frontend.
+The `main` branch deploys to GitHub Pages through the workflow in `.github/workflows/deploy.yml`. The workflow reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the repository's Actions variables. The Supabase publishable key is included in the browser app by design; database access must remain protected by the row-level security policies in `supabase/schema.sql`. Never use a `service_role` or secret key in this frontend.

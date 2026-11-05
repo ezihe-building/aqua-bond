@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import {
   Activity, ArrowLeft, ArrowRight, Bell, Check, CheckCircle2, ChevronRight,
-  CircleHelp, Clock3, Droplets, Flame, GlassWater, Heart, History, LogOut, Music2, Plus,
+  CircleHelp, Clock3, Droplets, Flame, GlassWater, Heart, History, Music2, Plus,
   Moon, Share2, ShieldCheck, Sparkles, Sun, Trophy, UserRound, Users, Volume2, VolumeX, Waves, X,
 } from "lucide-react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -27,20 +27,6 @@ const cloudReady = Boolean(supabaseUrl && supabaseKey);
 const supabase: SupabaseClient | null = cloudReady
   ? createClient(supabaseUrl!, supabaseKey!, { auth: { persistSession: true, autoRefreshToken: true } })
   : null;
-const authRedirectUrl = () => {
-  const configuredUrl = import.meta.env.VITE_SITE_URL as string | undefined;
-  return configuredUrl?.trim() || new URL(import.meta.env.BASE_URL, window.location.origin).toString();
-};
-const authenticationErrorMessage = (error: unknown) => {
-  const message = error instanceof Error ? error.message : "Couldn't complete that request. Please try again.";
-  if (/rate.?limit|too many requests/i.test(message)) {
-    return "Supabase temporarily limited an authentication email. Wait for its limit to reset before trying again. New account creation should not send email; if this happened while signing up, turn off email confirmation in Supabase Dashboard → Authentication → Sign In / Providers → Email. Your account may already exist, so try signing in before creating it again.";
-  }
-  if (/email not confirmed|email confirmation required/i.test(message)) {
-    return "This account still needs email confirmation. Turn off email confirmation in Supabase Dashboard → Authentication → Sign In / Providers → Email for new accounts, then try signing in again. If this account was created while confirmation was required, it may need to be removed from Authentication → Users before you can sign up again.";
-  }
-  return message;
-};
 const MILESTONES = [3, 7, 14, 30, 100];
 const AMOUNTS = [100, 250, 500];
 
@@ -109,16 +95,8 @@ function App() {
   const [friends, setFriends] = useState<FriendProgress[]>([]);
   const [screen, setScreen] = useState<Screen>("home");
   const [authLoading, setAuthLoading] = useState(cloudReady);
-  const [authReady, setAuthReady] = useState(cloudReady);
   const [cloudError, setCloudError] = useState("");
   const [isAnonymousAuth, setIsAnonymousAuth] = useState(false);
-  const [needsUpgradePassword, setNeedsUpgradePassword] = useState(false);
-  const [authMode, setAuthMode] = useState<"sign_in" | "sign_up">("sign_in");
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authName, setAuthName] = useState("");
-  const [authMessage, setAuthMessage] = useState("");
-  const [authError, setAuthError] = useState("");
   const [isGuest, setIsGuest] = useState(false);
   const [drinkAmount, setDrinkAmount] = useState(250);
   const [customAmount, setCustomAmount] = useState("");
@@ -321,29 +299,29 @@ function App() {
     }
   }, [today]);
 
-  const handleProfile = useCallback(async (nextProfile: Pick<Profile, "id">, anonymous: boolean, passwordPending = false) => {
+  const handleProfile = useCallback(async (nextProfile: Pick<Profile, "id">, anonymous: boolean) => {
     setIsGuest(false);
     setIsAnonymousAuth(anonymous);
-    setNeedsUpgradePassword(passwordPending);
-    setAuthMode(anonymous ? "sign_up" : "sign_in");
-    setAuthReady(true);
     await loadCloudData(nextProfile.id);
   }, [loadCloudData]);
 
   useEffect(() => {
     if (!cloudReady || !supabase) {
-      setCloudError("Add your Supabase URL and publishable key to enable private accounts.");
-      setAuthReady(true);
+      setCloudError("Aqua Bond could not connect to its data service. Refresh the page or contact the app owner.");
       setAuthLoading(false);
       return;
     }
     let active = true;
     setAuthLoading(true);
     setCloudError("");
-    const callbackError = new URLSearchParams(window.location.search).get("error_description");
-    if (callbackError) {
-      setAuthError(`Email verification could not finish: ${callbackError}. Request a new email after updating Supabase's redirect URLs.`);
-    }
+    const startAnonymousProfile = async () => {
+      const { data, error } = await supabase.auth.signInAnonymously({
+        options: { data: { display_name: "Aqua friend" } },
+      });
+      if (error) throw error;
+      if (!data.user) throw new Error("Supabase did not start a private profile.");
+      await handleProfile({ id: data.user.id }, true);
+    };
     supabase.auth.getSession().then(async ({ data, error }) => {
       if (error) console.error("Could not restore the Aqua Bond session.", error);
       if (!active) return;
@@ -351,109 +329,35 @@ function App() {
       if (!user) {
         setProfile(null);
         setIsAnonymousAuth(false);
-        setAuthReady(true);
-        setAuthLoading(false);
-        return;
+        await startAnonymousProfile();
+      } else {
+        await handleProfile({ id: user.id }, Boolean(user.is_anonymous));
       }
-      const passwordPending = user.user_metadata?.aqua_bond_password_pending === true;
-      if (user.email) setAuthEmail(user.email);
-      await handleProfile({ id: user.id }, Boolean(user.is_anonymous), passwordPending);
+      if (!active) return;
       setCloudError("");
       setAuthLoading(false);
     }).catch((caught: unknown) => {
       if (!active) return;
       console.error("Could not start the Aqua Bond session.", caught);
-      setCloudError(caught instanceof Error ? caught.message : "Couldn't start your private session.");
+      const message = caught instanceof Error ? caught.message : "Couldn't start your private profile.";
+      setCloudError(/anonymous|disabled/i.test(message)
+        ? "Device profiles are not enabled in Supabase. The app owner needs to turn on Anonymous Sign-Ins in Authentication → Sign In / Providers."
+        : message);
       setAuthLoading(false);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session && event === "SIGNED_OUT") {
         setProfile(null);
         setLogs([]);
         setChallenges([]);
         setFriends([]);
         setIsAnonymousAuth(false);
-        setNeedsUpgradePassword(false);
-        setAuthMode("sign_in");
-        setAuthReady(true);
+        setCloudError("Your private device profile was signed out. Refresh the page to start a new one.");
       }
     });
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, [handleProfile]);
 
-  const submitAuthentication = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!supabase || busy) return;
-    setBusy(true);
-    setAuthError("");
-    setAuthMessage("");
-    try {
-      if (needsUpgradePassword && profile && supabase) {
-        if (authPassword.length < 8) throw new Error("Choose a password with at least 8 characters.");
-        const { data, error } = await supabase.auth.updateUser({
-          password: authPassword,
-          data: { display_name: profile.display_name, aqua_bond_password_pending: false },
-        });
-        if (error) throw error;
-        if (!data.user) throw new Error("Supabase did not return your updated account.");
-        setNeedsUpgradePassword(false);
-        setIsAnonymousAuth(false);
-        setAuthPassword("");
-        notify("Your account is secured. Your progress and friends are still here 💙");
-      } else if (authMode === "sign_up") {
-        const displayName = authName.trim();
-        if (!displayName || displayName.length > 32) throw new Error("Your name needs to be between 1 and 32 characters.");
-        if (profile && isAnonymousAuth) {
-          if (!authEmail.trim()) throw new Error("Enter the email address you want to use.");
-          const { data, error } = await supabase.auth.updateUser({
-            email: authEmail.trim(),
-            data: { display_name: displayName, aqua_bond_password_pending: true },
-          }, { emailRedirectTo: authRedirectUrl() });
-          if (error) throw error;
-          if (!data.user) throw new Error("Supabase did not return your updated account.");
-          await persistProfile({ ...profile, display_name: displayName });
-          setNameEntry(null);
-          setAuthPassword("");
-          setAuthMessage("Check your email and follow the verification link. Then set a password here to finish securing this same profile.");
-        } else {
-          if (authPassword.length < 8) throw new Error("Choose a password with at least 8 characters.");
-          const { data, error } = await supabase.auth.signUp({
-            email: authEmail.trim(),
-            password: authPassword,
-            options: {
-              data: { display_name: displayName },
-            },
-          });
-          if (error) throw error;
-          if (!data.user) throw new Error("Supabase did not return an account. Please try again.");
-          if (!data.session) {
-            if (data.user.identities?.length === 0) {
-              throw new Error("An account with this email may already exist. Switch to Sign in and try your password. If that account was created while email confirmation was on, it must be confirmed or removed from Supabase Dashboard → Authentication → Users before you can sign up with this address again.");
-            }
-            throw new Error("Supabase did not start a session. Email confirmation is still enabled for this project. Turn it off in Supabase Dashboard → Authentication → Sign In / Providers → Email, then try signing in before attempting to create the account again.");
-          }
-          await handleProfile({ id: data.user.id }, Boolean(data.user.is_anonymous));
-          setAuthPassword("");
-          notify("Your account is ready. Welcome to Aqua Bond 💙");
-        }
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: authEmail.trim(),
-          password: authPassword,
-        });
-        if (error) throw error;
-        if (!data.user) throw new Error("Supabase did not return your account.");
-        await handleProfile({ id: data.user.id }, Boolean(data.user.is_anonymous));
-        setAuthPassword("");
-        notify("Welcome back 💙");
-      }
-    } catch (error) {
-      console.error("Could not complete authentication.", error);
-      setAuthError(authenticationErrorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   useEffect(() => {
     if (!supabase || !profile || isGuest) return;
@@ -736,12 +640,6 @@ function App() {
     setInstallPrompt(null);
   };
 
-  const logout = async () => {
-    if (!supabase) return;
-    const { error } = await supabase.auth.signOut();
-    if (error) { console.error("Could not sign out.", error); notify(error.message); }
-  };
-
   const weekData = useMemo(() => {
     return Array.from({ length: 7 }, (_, index) => {
       const key = relativeDays(6 - index);
@@ -774,28 +672,8 @@ function App() {
     return count;
   }, [friendChallenges, today]);
 
-  if (authLoading) return <div className="loading-screen"><div className="loader-drop"><Droplets size={23} /></div><p>Pouring your Aqua Bond…</p></div>;
-  if ((!profile || isAnonymousAuth) && authReady) return <AuthWelcome
-    mode={isAnonymousAuth ? "sign_up" : needsUpgradePassword ? "set_password" : authMode}
-    email={authEmail}
-    password={authPassword}
-    name={authName || (isAnonymousAuth ? profile?.display_name ?? "" : "")}
-    message={authMessage}
-    error={authError || cloudError}
-    busy={busy}
-    canAuthenticate={cloudReady}
-    hasAnonymousProfile={isAnonymousAuth}
-    needsUpgradePassword={needsUpgradePassword}
-    onEmailChange={setAuthEmail}
-    onPasswordChange={setAuthPassword}
-    onNameChange={setAuthName}
-    onModeChange={(mode) => { setAuthMode(mode); setAuthMessage(""); setAuthError(""); }}
-    onSubmit={(event) => void submitAuthentication(event)}
-    theme={theme}
-    onToggleTheme={toggleTheme}
-  />;
-  if (!profile) return <div className="loading-screen"><div className="loader-drop"><Droplets size={23} /></div><p>Preparing your private account…</p></div>;
-
+  if (authLoading) return <div className="loading-screen"><div className="loader-drop"><Droplets size={23} /></div><p>Preparing Aqua Bond…</p></div>;
+  if (!profile) return <main className="auth-page"><section className="guest-card"><h1>Couldn’t open Aqua Bond</h1><p>{cloudError || "Your private profile could not be started. Check your connection and try again."}</p><button className="button-primary" onClick={() => window.location.reload()}>Try again <ArrowRight size={16} /></button></section></main>;
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -848,7 +726,7 @@ function App() {
                 </div> : <div className="buddy-empty">
                   <div className="buddy-art"><div className="mini-buddy one"><Droplets size={20} /></div><div className="mini-buddy two"><Droplets size={20} /></div><span className="buddy-art-heart">♡</span></div>
                   <p>Your favorite person makes every sip a little sweeter.</p>
-                  {isGuest ? <button className="button-outline" onClick={() => notify("To connect a friend, create an account with Supabase enabled.")}><Users size={15} /> Create an account to invite</button> : <button className="button-outline" onClick={() => setScreen("profile")}><Users size={15} /> Invite your person</button>}
+                  <button className="button-outline" onClick={() => setScreen("profile")}><Users size={15} /> Invite your person</button>
                 </div>}
               </article>
               <article className="glass-card week-card">
@@ -885,7 +763,7 @@ function App() {
 
         {screen === "profile" && <section className="settings-layout">
           <div className="settings-main">
-            <article className="glass-card settings-profile"><div className="settings-avatar">{profile.display_name.slice(0, 1).toUpperCase()}<span><Check size={11} /></span></div><div className="settings-person"><span className="card-kicker">{isGuest ? "YOUR LOCAL PROFILE" : "YOUR AQUA BOND PROFILE"}</span><h2>{profile.display_name}</h2><p>{isGuest ? "Saved just on this device" : "Showing up for yourself, beautifully."}</p></div><div className="profile-streak"><Flame size={16} fill="currentColor" /><b>{streak}</b><span>day streak</span></div></article>
+            <article className="glass-card settings-profile"><div className="settings-avatar">{profile.display_name.slice(0, 1).toUpperCase()}<span><Check size={11} /></span></div><div className="settings-person"><span className="card-kicker">{isAnonymousAuth ? "YOUR DEVICE PROFILE" : "YOUR AQUA BOND PROFILE"}</span><h2>{profile.display_name}</h2><p>{isAnonymousAuth ? "Saved to this browser. Clearing browser data may remove access to this profile." : "Showing up for yourself, beautifully."}</p></div><div className="profile-streak"><Flame size={16} fill="currentColor" /><b>{streak}</b><span>day streak</span></div></article>
             <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon"><UserRound size={17} /></div><div><h3>Your name</h3><p>Choose the name your water buddy sees.</p></div></div><div className="custom-goal-row name-row"><label htmlFor="display-name">Display name</label><div><input id="display-name" type="text" maxLength={32} value={nameEntry ?? profile.display_name} onChange={(event) => setNameEntry(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveDisplayName(); }} /><button onClick={() => void saveDisplayName()}>Save name</button></div></div></article>
             <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon"><Activity size={17} /></div><div><h3>Your daily goal</h3><p>A good place to start is whatever feels right for you.</p></div></div><div className="goal-presets">{[1500, 2000, 2500, 3000].map((amount) => <button key={amount} className={goal === amount ? "goal-selected" : ""} onClick={() => void setGoal(amount)}>{formatMl(amount)} <small>ml</small></button>)}</div><div className="custom-goal-row"><label htmlFor="custom-goal">Or choose your own amount</label><div><input id="custom-goal" type="number" min="500" max="8000" step="100" placeholder={`${goal}`} onKeyDown={(event) => { if (event.key === "Enter") void setGoal(Number((event.target as HTMLInputElement).value)); }} /><span>ml</span><button onClick={(event) => { const input = (event.currentTarget.previousElementSibling?.previousElementSibling as HTMLInputElement); void setGoal(Number(input.value)); }}>Save goal</button></div></div></article>
             <article className="glass-card settings-section"><div className="settings-section-head"><div className="settings-icon reminder-icon"><Bell size={17} /></div><div><h3>A gentle reminder</h3><p>A little nudge, right when you need one.</p></div></div><div className="setting-row"><div className="setting-row-icon"><Clock3 size={16} /></div><div className="setting-row-copy"><b>Daily water break</b><span>{profile.reminder_time ? `A little sip at ${profile.reminder_time}` : "Choose a time for your gentle reminder"}</span></div><input aria-label="Reminder time" type="time" value={profile.reminder_time ?? ""} onChange={(event) => { void persistProfile({ ...profile, reminder_time: event.target.value || null }).then(() => notify(event.target.value ? "Your gentle reminder is set 💧" : "Reminder turned off." )).catch((error: unknown) => { console.error("Could not save reminder time.", error); notify("Couldn't save your reminder time."); }); }} /></div><button className="setting-row setting-button" onClick={() => void requestNotifications()}><div className="setting-row-icon"><Bell size={16} /></div><div className="setting-row-copy"><b>Allow notifications</b><span>Get a nudge even when you're away from the app</span></div><ChevronRight size={16} /></button></article>
@@ -897,7 +775,6 @@ function App() {
             {isGuest ? <article className="glass-card invite-card invite-disabled"><div className="invite-decoration"><Users size={21} /></div><span className="card-kicker">BETTER TOGETHER</span><h3>Your people are<br /><span>one sip away.</span></h3><p>Connect this app to Supabase to get a private invite code and connect with multiple friends. No sign-up needed.</p><div className="invite-code"><span>FRIEND SYNC</span><b>Needs Supabase</b><button onClick={() => notify("Add your Supabase project URL and anon/publishable key to .env, then run the setup SQL.")}><CircleHelp size={15} /></button></div></article> : <article className="glass-card invite-card"><div className="invite-decoration"><Users size={21} /></div><span className="card-kicker">YOUR WATER BUDDIES</span><h3>Good habits are<br /><span>better together.</span></h3><p>Share your private code, then connect with other people's invite codes. Connected friends can see each other's progress live.</p><div className="invite-code"><span>YOUR PRIVATE CODE</span><b>{profile.invite_code}</b><button aria-label="Share invite code" onClick={() => void shareInvite()}><Share2 size={15} /></button></div><form className="join-form" onSubmit={(event) => void connectFriend(event)}><input value={inviteEntry} onChange={(event) => setInviteEntry(event.target.value.toUpperCase())} placeholder="Enter their invite code" aria-label="Friend invite code" /><button className="button-primary" disabled={busy}>Connect <ArrowRight size={15} /></button></form><div className="followed-list" aria-live="polite">{friends.length === 0 ? <p className="followed-empty">You haven’t connected with anyone yet. Add your first person above.</p> : friends.map((followed) => { const amount = followed.logs.filter((log) => log.challenge_date === today).reduce((sum, log) => sum + log.amount_ml, 0); const percentComplete = Math.min(100, Math.round((amount / followed.profile.daily_goal_ml) * 100)); return <div className="connected-friend" key={followed.profile.id}><span className="avatar friend-avatar">{followed.profile.display_name.slice(0, 1).toUpperCase()}</span><div><b>{followed.profile.display_name}</b><span>{percentComplete}% of today’s goal</span></div><span className="live-dot" /><button className="disconnect-button" aria-label={`Disconnect from ${followed.profile.display_name}`} onClick={() => void disconnectFriend(followed)}><X size={14} /></button></div>; })}</div></article>}
             <article className="glass-card privacy-card"><div className="privacy-icon"><ShieldCheck size={20} /></div><div><h4>Your water is personal.</h4><p>Connected friends can see each other's drink logs and daily goals.</p></div></article>
             {installPrompt && <button className="install-setting" onClick={() => void installApp()}><Sparkles size={15} /> Install Aqua Bond on this device <ArrowRight size={15} /></button>}
-            <button className="sign-out-button" onClick={() => void logout()}><LogOut size={15} /> Sign out of {profile.display_name}'s account</button>
           </aside>
         </section>}
       </main>
@@ -915,62 +792,6 @@ function App() {
 
 function BuddyBottle({ name, percent, consumed, goal, hue, initial }: { name: string; percent: number; consumed: number; goal: number; hue: "blue" | "purple"; initial: string }) {
   return <div className={`buddy-person buddy-${hue}`}><div className="buddy-bottle"><Bottle percent={100 - percent} compact hue={hue} /><span className="buddy-initial">{initial}</span></div><b className="buddy-name">{name}</b><strong>{percent}<small>%</small></strong><div className="buddy-meter"><i style={{ width: `${percent}%` }} /></div><span className="buddy-ml">{formatMl(consumed)} / {formatMl(goal)} ml</span></div>;
-}
-
-type AuthWelcomeProps = {
-  mode: "sign_in" | "sign_up" | "set_password";
-  email: string;
-  password: string;
-  name: string;
-  message: string;
-  error: string;
-  busy: boolean;
-  canAuthenticate: boolean;
-  hasAnonymousProfile: boolean;
-  needsUpgradePassword: boolean;
-  onEmailChange: (email: string) => void;
-  onPasswordChange: (password: string) => void;
-  onNameChange: (name: string) => void;
-  onModeChange: (mode: "sign_in" | "sign_up") => void;
-  onSubmit: (event: FormEvent) => void;
-  theme: "dark" | "light";
-  onToggleTheme: () => void;
-};
-
-function AuthWelcome({
-  mode, email, password, name, message, error, busy, hasAnonymousProfile,
-  needsUpgradePassword, onEmailChange, onPasswordChange, onNameChange, onModeChange, onSubmit, theme, onToggleTheme, canAuthenticate,
-}: AuthWelcomeProps) {
-  const signingUp = mode === "sign_up";
-  const settingPassword = mode === "set_password";
-  return (
-    <main className="auth-page auth-welcome">
-      <div className="auth-orb orb-one" /><div className="auth-orb orb-two" />
-      <button className="icon-button theme-button auth-theme-button" onClick={onToggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
-        {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-      </button>
-      <div className="guest-card auth-welcome-card">
-        <a className="brand auth-brand" href="#"><span className="brand-mark"><Droplets size={18} /></span><span>aqua<span className="brand-light">bond</span></span></a>
-        <p className="eyebrow">{hasAnonymousProfile || needsUpgradePassword ? "KEEP YOUR WATER STORY SAFE" : "A LITTLE WATER. A LOT MORE TOGETHER."}</p>
-        <h1>{hasAnonymousProfile ? <>Make your profile<br /><span>yours alone.</span></> : settingPassword ? <>One last little<br /><span>step.</span></> : signingUp ? <>A softer way to<br /><span>stay hydrated.</span></> : <>Welcome <span>back.</span></>}</h1>
-        <p className="auth-subtitle">{hasAnonymousProfile ? "Add an email and password to keep your progress and friends on this profile." : settingPassword ? "Set a password to finish securing your existing profile." : signingUp ? "Create your private account with an email and password. No verification email is needed." : "Your own private account keeps your water story separate on every device."}</p>
-        {!hasAnonymousProfile && !settingPassword && <div className="auth-mode-tabs" role="tablist" aria-label="Account options">
-          <button type="button" className={!signingUp ? "auth-mode-active" : ""} role="tab" aria-selected={!signingUp} onClick={() => onModeChange("sign_in")}>Sign in</button>
-          <button type="button" className={signingUp ? "auth-mode-active" : ""} role="tab" aria-selected={signingUp} onClick={() => onModeChange("sign_up")}>Create account</button>
-        </div>}
-        <form className="guest-form auth-account-form" onSubmit={onSubmit}>
-          {signingUp && <label>Your name<input autoComplete="name" value={name} onChange={(event) => onNameChange(event.target.value)} placeholder="Your name" maxLength={32} required /></label>}
-          {!settingPassword && <label>Email address<input type="email" autoComplete="email" value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@example.com" required /></label>}
-          {settingPassword && <div className="auth-verified-email"><CheckCircle2 size={15} /> Email verified · {email}</div>}
-          {!hasAnonymousProfile && <label>Password<input type="password" autoComplete={settingPassword || signingUp ? "new-password" : "current-password"} value={password} onChange={(event) => onPasswordChange(event.target.value)} placeholder={signingUp || settingPassword ? "At least 8 characters" : "Your password"} minLength={signingUp || settingPassword ? 8 : undefined} required /></label>}
-          {error && <p className="auth-feedback auth-feedback-error" role="alert">{error}</p>}
-          {message && <p className="auth-feedback auth-feedback-success" role="status">{message}</p>}
-          <button className="button-primary auth-submit" disabled={busy || !canAuthenticate}>{busy ? "One moment…" : hasAnonymousProfile ? "Send verification email" : settingPassword ? "Set password" : signingUp ? "Create my account" : "Sign in"}<ArrowRight size={17} /></button>
-        </form>
-        <div className="guest-disclaimer auth-privacy-note"><ShieldCheck size={14} /><span>Sharing this link never shares your signed-in account. Sign out on shared devices so the next person can use their own account.</span></div>
-      </div>
-    </main>
-  );
 }
 
 interface BeforeInstallPromptEvent extends Event {
